@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Isle of Wiki</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="chip"><span class="chip-label">ON PAGE</span><span id="hud-page"></span></div>
+        <div class="chip chip-target"><span class="chip-label">TARGET</span><span id="hud-target"></span></div>
+      </div>
+      <div id="hud-gate" class="gate-callout hidden"></div>
+      <div id="hud-gnme" class="gnme hidden"></div>
+      <div id="hud-status" class="hud-status hidden"></div>
+      <div class="crosshair"></div>
+      <div class="hud-bottom">
+        <span id="hud-stats"></span>
+        <span class="keys">WASD move · mouse look · Space / C up-down · Shift boost · wheel speed · M overview · G goodnight · J jump (debug) · Esc release</span>
+      </div>
+    </div>
+
+    <div id="paused" class="hidden">
+      <span>Click the world to fly</span>
+      <button id="open-menu" type="button">Change pages</button>
+    </div>
+
+    <div id="menu" class="panel">
+      <h1>ISLE OF WIKI</h1>
+      <p class="sub">Wikipedia pod racing · world preview</p>
+      <form id="race-form">
+        <label>
+          Start page
+          <input id="start" list="suggest-start" autocomplete="off" required value="Podracing" />
+        </label>
+        <datalist id="suggest-start"></datalist>
+        <label>
+          Target page
+          <input id="target" list="suggest-target" autocomplete="off" required value="Moon" />
+        </label>
+        <datalist id="suggest-target"></datalist>
+        <div class="row">
+          <button type="button" id="random-start" class="secondary">Random start</button>
+          <button type="submit" id="go">Build world</button>
+        </div>
+      </form>
+      <p id="status" role="status"></p>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

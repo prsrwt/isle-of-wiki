@@ -1,0 +1,15 @@
+{
+  "name": "isle-of-wiki",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @isle-of-wiki/client",
+    "build": "npm run build -w @isle-of-wiki/client",
+    "test": "npm run test -w @isle-of-wiki/shared",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
