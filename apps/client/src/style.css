@@ -283,3 +283,314 @@ body {
   border-radius: 14px;
   box-shadow: 4px 4px 0 var(--red);
 }
+
+/* ---------- Folio (article map, Tab) ---------- */
+#folio {
+  position: fixed;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 4px solid var(--ink);
+  border-radius: 22px;
+  box-shadow: 8px 8px 0 var(--ink);
+  overflow: hidden;
+}
+
+.folio-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.folio-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--red);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folio-hint {
+  flex: 1;
+  min-width: 0;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#folio-close {
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 800;
+  background: var(--ink);
+  color: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.folio-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+
+.folio-text {
+  overflow-y: auto;
+  padding: 8px 22px 32px;
+  font-size: 15px;
+  line-height: 1.55;
+  border-right: 3px solid var(--ink);
+}
+
+.folio-text h3 {
+  margin: 22px 0 6px;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.folio-text h4 {
+  margin: 16px 0 4px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.folio-text p {
+  margin: 0 0 10px;
+}
+
+.folio-aside {
+  font-size: 13px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.folio-infobox {
+  margin: 12px 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+}
+
+.folio-infobox strong {
+  display: block;
+  margin-bottom: 4px;
+  letter-spacing: 0.06em;
+}
+
+.folio-infobox-header {
+  font-weight: 800;
+}
+
+.folio-link {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: underline 2px #c9b48c;
+  text-underline-offset: 2px;
+  border-radius: 4px;
+}
+
+.folio-link.is-target {
+  color: var(--red);
+  text-decoration-color: var(--red);
+}
+
+.folio-link.hover {
+  background: var(--ink);
+  color: var(--paper);
+  text-decoration: none;
+}
+
+.folio-link.selected {
+  background: #f5c518;
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+  text-decoration: none;
+}
+
+.folio-dead {
+  opacity: 0.55;
+}
+
+.folio-map-wrap {
+  position: relative;
+  min-height: 0;
+}
+
+#folio-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.folio-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+}
+
+.folio-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.folio-legend .lg-you {
+  background: var(--red);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.folio-legend .lg-cave {
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+}
+
+.folio-legend .lg-target {
+  background: var(--red);
+}
+
+.folio-legend .lg-picked {
+  background: #f5c518;
+}
+
+@media (max-width: 760px) {
+  #folio {
+    inset: 8px;
+  }
+
+  .folio-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .folio-text {
+    border-right: 0;
+    border-bottom: 3px solid var(--ink);
+  }
+}
+
+.folio-zoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.folio-zoom button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+.folio-zoom button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+#folio-map {
+  cursor: grab;
+}
+
+.folio-zoom button svg {
+  display: block;
+  margin: auto;
+}
+
+/* ---------- Thread (guidance to the cave picked in Folio) ---------- */
+.chip-thread .chip-label {
+  color: var(--ink);
+  background: #f5c518;
+}
+
+.thread-arrow {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: #f5c518;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.thread-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-dist {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Marker floating over the Thread's cave when it's in view. */
+.thread-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  will-change: transform;
+}
+
+.thread-mark::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: #f5c518;
+  border: 3px solid var(--ink);
+  transform: rotate(45deg);
+}
+
+.thread-mark span {
+  padding: 1px 7px;
+  background: #f5c518;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+
+.gate-callout.is-thread {
+  color: var(--ink);
+  background: #f5c518;
+}

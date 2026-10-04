@@ -58,6 +58,7 @@ export interface GnmeStats {
 export class Gnme implements System {
   readonly name = 'gnme';
   private readonly queue: { s: Sleeper; target: Rest; d: number }[] = [];
+  private lightsOut = false;
 
   constructor(
     private readonly camera: THREE.Camera,
@@ -86,7 +87,17 @@ export class Gnme implements System {
     }
   }
 
+  /**
+   * Lights out: something covers the whole screen (Folio), so say goodnight to every cell and
+   * keep them asleep until the lights come back on. Built cells stay built, so waking is instant.
+   */
+  setLightsOut(on: boolean): void {
+    this.lightsOut = on;
+    if (on) for (const s of this.sleepers) if (s.state !== 'asleep') s.rest('asleep');
+  }
+
   frameUpdate(): void {
+    if (this.lightsOut) return;
     const cam = this.camera.position;
     this.queue.length = 0;
     for (const s of this.sleepers) {

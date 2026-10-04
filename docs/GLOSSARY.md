@@ -8,11 +8,11 @@ Use these names in code (folders, types, functions) and in issues.
 | Name | What it is | Lives in |
 |---|---|---|
 | **Heartbeat** | Runtime: fixed-step clock (60 ticks/s), systems, entity registry. Same code on client and server. | `packages/shared/src/heartbeat/`, `apps/client/src/heartbeat/` (loop, input) |
-| **GNME** — Goodnight Moon Engine | Says "goodnight" to whatever you don't need right now (far chunks, text, detail, images) and "good morning" when you come back. Also builds the world off the main thread and nearest-first. | `packages/shared/src/gnme/` (chunk maths), `apps/client/src/gnme/` |
+| **GNME** — Goodnight Moon Engine | Says "goodnight" to whatever you don't need right now (far chunks, text, detail, images) and "good morning" when you come back. Also builds the world off the main thread and nearest-first. **Lights out**: while Folio covers the screen, every cell sleeps and the 3D scene isn't drawn. | `packages/shared/src/gnme/` (chunk maths), `apps/client/src/gnme/` |
 | **Atlas** | Track engine: Wikipedia article → world. Plug-in *structures* (`atlas/structures/`) and *biomes* (`atlas/biomes/` for shape, `apps/client/src/render/biomes/` for colours). The **Furnisher** fills canyons with caves and props. | `packages/shared/src/atlas/` |
 | **Guestbook** | Room memory: the first player to reach a page "signs" which biome and structure it gets (never the arriving player's current biome); everyone after reads it. Keyed by canonical article title. | `packages/shared/src/guestbook/` |
-| **Folio** | The article map overlay (Tab): the whole page, clickable links, "you are here". | Phase C |
-| **Thread** | Navigation to the link you chose in Folio: HUD arrow + distance, and the cave callout when you're close. | Phase C |
+| **Folio** | The article map overlay (Tab): the whole page, clickable links, "you are here". Opening it pauses nothing. | `apps/client/src/folio/` |
+| **Thread** | Navigation to the link you chose in Folio: HUD arrow + distance, a marker over the cave when it's in view, and the "Your cave" callout when you're close. | `packages/shared/src/thread/` (maths, link → cave), `apps/client/src/ui/hud.ts` |
 
 ## Structures (Atlas layouts)
 

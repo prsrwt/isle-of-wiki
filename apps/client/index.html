@@ -18,14 +18,54 @@
       <div class="hud-top">
         <div class="chip"><span class="chip-label">ON PAGE</span><span id="hud-page"></span></div>
         <div class="chip chip-target"><span class="chip-label">TARGET</span><span id="hud-target"></span></div>
+        <div id="hud-thread" class="chip chip-thread hidden">
+          <span class="chip-label">THREAD</span>
+          <svg id="hud-thread-arrow" class="thread-arrow" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2 L21 21 L12 16 L3 21 Z" />
+          </svg>
+          <span id="hud-thread-name" class="thread-name"></span>
+          <span id="hud-thread-dist" class="thread-dist"></span>
+        </div>
       </div>
       <div id="hud-gate" class="gate-callout hidden"></div>
+      <div id="hud-thread-mark" class="thread-mark hidden"><span id="hud-thread-mark-dist"></span></div>
       <div id="hud-gnme" class="gnme hidden"></div>
       <div id="hud-status" class="hud-status hidden"></div>
       <div class="crosshair"></div>
       <div class="hud-bottom">
         <span id="hud-stats"></span>
-        <span class="keys">WASD move · mouse look · Space / C up-down · Shift boost · wheel speed · M overview · G goodnight · J jump (debug) · Esc release</span>
+        <span class="keys">WASD move · mouse look · Space / C up-down · Shift boost · wheel speed · Tab folio · M overview · G goodnight · J jump (debug) · Esc release</span>
+      </div>
+    </div>
+
+    <div id="folio" class="hidden">
+      <header class="folio-head">
+        <span class="chip-label">FOLIO</span>
+        <h2 id="folio-title"></h2>
+        <span id="folio-hint" class="folio-hint"></span>
+        <button id="folio-close" type="button">Close · Tab</button>
+      </header>
+      <div class="folio-body">
+        <article id="folio-text" class="folio-text"></article>
+        <div class="folio-map-wrap">
+          <canvas id="folio-map"></canvas>
+          <div class="folio-zoom">
+            <button id="folio-zoom-in" type="button" title="Zoom in">+</button>
+            <button id="folio-zoom-out" type="button" title="Zoom out">−</button>
+            <button id="folio-zoom-fit" type="button" title="Reset view" aria-label="Reset view">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+                <path d="M20 4v5h-5" />
+              </svg>
+            </button>
+          </div>
+          <div class="folio-legend">
+            <span><i class="lg-you"></i>You</span>
+            <span><i class="lg-cave"></i>Cave</span>
+            <span><i class="lg-target"></i>Target</span>
+            <span><i class="lg-picked"></i>Thread</span>
+          </div>
+        </div>
       </div>
     </div>
 

@@ -33,6 +33,8 @@ export class FreeFlyControls implements System {
       if (!this.locked) this.input.clear();
       this.onLockChange(this.locked);
     });
+    // Older browsers report a refused lock only through this event.
+    document.addEventListener('pointerlockerror', () => this.onLockChange(false));
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       this.yaw -= e.movementX * LOOK_SPEED;
@@ -49,6 +51,21 @@ export class FreeFlyControls implements System {
 
   get locked(): boolean {
     return document.pointerLockElement === this.dom;
+  }
+
+  /** Captures the mouse (needs a recent click or key press). Resolves false if the browser refuses. */
+  async lock(): Promise<boolean> {
+    if (!this.enabled) return false;
+    try {
+      await this.dom.requestPointerLock();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  unlock(): void {
+    if (this.locked) document.exitPointerLock();
   }
 
   setPose(x: number, y: number, z: number, yaw: number, pitch: number): void {

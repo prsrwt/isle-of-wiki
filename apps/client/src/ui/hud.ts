@@ -1,3 +1,8 @@
+/** "340 m" or "1.2 km". */
+export function formatDistance(m: number): string {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
 function $(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing #${id}`);
@@ -13,7 +18,15 @@ export class Hud {
   private readonly paused = $('paused');
   private readonly gnme = $('hud-gnme');
   private readonly status = $('hud-status');
-  private lastGate: string | null = null;
+  private readonly thread = $('hud-thread');
+  private readonly threadArrow = $('hud-thread-arrow');
+  private readonly threadName = $('hud-thread-name');
+  private readonly threadDist = $('hud-thread-dist');
+  private readonly threadMark = $('hud-thread-mark');
+  private readonly threadMarkDist = $('hud-thread-mark-dist');
+  private lastGate = '';
+  private lastThread = '';
+  private lastMark = '';
 
   setPage(page: string, target: string): void {
     this.page.textContent = page;
@@ -21,11 +34,42 @@ export class Hud {
     this.root.classList.remove('hidden');
   }
 
-  setGate(target: string | null): void {
-    if (target === this.lastGate) return;
-    this.lastGate = target;
+  /** The cave just ahead, or null. `isThread` when it's the one picked in Folio. */
+  setGate(target: string | null, isThread = false): void {
+    const key = `${target ?? ''}|${isThread}`;
+    if (key === this.lastGate) return;
+    this.lastGate = key;
     this.gate.classList.toggle('hidden', !target);
-    this.gate.textContent = target ? `⟶ ${target}` : '';
+    this.gate.classList.toggle('is-thread', isThread);
+    this.gate.textContent = !target ? '' : isThread ? `★ Your cave ⟶ ${target}` : `⟶ ${target}`;
+  }
+
+  /**
+   * The Thread chip: arrow turned `turn` radians from straight ahead (positive = right) and the
+   * distance to the cave. Null hides it.
+   */
+  setThread(t: { name: string; distance: number; turn: number } | null): void {
+    const deg = t ? Math.round((t.turn * 180) / Math.PI) : 0;
+    const dist = t ? formatDistance(t.distance) : '';
+    const key = t ? `${t.name}|${dist}|${deg}` : '';
+    if (key === this.lastThread) return;
+    this.lastThread = key;
+    this.thread.classList.toggle('hidden', !t);
+    if (!t) return;
+    this.threadName.textContent = t.name;
+    this.threadDist.textContent = dist;
+    this.threadArrow.style.transform = `rotate(${deg}deg)`;
+  }
+
+  /** Marker over the Thread's cave at screen point (x, y) in CSS px, or null when it's out of view. */
+  setThreadMark(at: { x: number; y: number; distance: number } | null): void {
+    const key = at ? `${Math.round(at.x)},${Math.round(at.y)},${formatDistance(at.distance)}` : '';
+    if (key === this.lastMark) return;
+    this.lastMark = key;
+    this.threadMark.classList.toggle('hidden', !at);
+    if (!at) return;
+    this.threadMark.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px) translate(-50%, -100%)`;
+    this.threadMarkDist.textContent = formatDistance(at.distance);
   }
 
   setStats(text: string): void {

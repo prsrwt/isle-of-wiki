@@ -17,3 +17,4 @@ export * from './heartbeat/clock';
 export * from './heartbeat/heartbeat';
 export * from './heartbeat/registry';
 export * from './gnme/chunks';
+export * from './thread/thread';

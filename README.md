@@ -46,10 +46,12 @@ will use the same data as colliders.
    - ✅ 1b-A: canyon country (islands, newspaper-column canyons, mesas/buttes, slot canyons, caves, cliff panels)
    - ✅ 1b-B: origami ink style, starry void, halftone paintings, carved quotes, ad slots
    - ✅ 1c-A: race track — heightfield terrain, arena + trunk + winding section canyons, arches, spires
-   - 1c-B: origami biomes per article (desert, ice, jungle, volcanic, ruins), arena dressing, shadows
+   - ✅ 1c-B: origami biomes per article (Dune, Frost, Canopy, Ember, Relic), arena dressing, shadows
    - ✅ A: Heartbeat runtime + GNME (regions/chunks, sleep states, worker generation, article cache)
    - ✅ B: Atlas — engine-picked structures (The Hidden Lotus, Vine, Lilypad) and biomes; Guestbook; floor text removed; shadows, crowds
-   - C: Folio article map + Thread navigation
+   - ✅ C: Folio article map + Thread navigation
+     - ✅ C1: Folio (Tab) — article text and zoomable track map, pick a link or cave
+     - ✅ C2: Thread — HUD arrow, distance and on-screen marker for the picked cave
 2. Pod + first-person driving (Rapier physics)
 3. Link tunnels + full single-player race
 4. Online multiplayer

@@ -86,8 +86,10 @@ export class Furnisher {
     const rot = yawQuat(p.t);
     this.box('board', at(p, 0, clearance + boardH / 2), [span + 1.2, boardH, 0.8], rot);
     for (const side of [-1, 1]) this.box('pillar', at(p, side * (half - 0.6), clearance / 2), [1.2, clearance, 1.2], rot);
+    // The title on both faces: free flight (and some tracks) pass under from either direction.
     const c = at(p, 0, clearance + boardH / 2);
     this.wallText(label, [c[0] - p.t[0] * 0.45, c[1], c[2] - p.t[1] * 0.45], neg(p.t), cw, ch, 'heading');
+    this.wallText(label, [c[0] + p.t[0] * 0.45, c[1], c[2] + p.t[1] * 0.45], p.t, cw, ch, 'heading');
   }
 
   /** Rock arch spanning a canyon at p, legs buried in the walls, crown well above the hover ceiling. */

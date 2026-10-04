@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { Guestbook, Heartbeat, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
+import { Guestbook, Heartbeat, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
 import { HouseAdProvider, type AdProvider } from './ads/AdProvider';
 import { FreeFlyControls } from './controls/FreeFlyControls';
+import { Folio } from './folio/Folio';
 import { Gnme, goodnightLines } from './gnme/Gnme';
 import { Input } from './heartbeat/Input';
 import { startLoop } from './heartbeat/Loop';
@@ -27,6 +28,7 @@ export class App {
   private readonly heartbeat = new Heartbeat();
   private readonly gradient = createToonGradient();
   private readonly ads: AdProvider = new HouseAdProvider();
+  private readonly folio = new Folio();
   private readonly hemi = new THREE.HemisphereLight();
   private readonly sun = new THREE.DirectionalLight();
   private readonly sunDir = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
@@ -36,6 +38,8 @@ export class App {
   private gnme: Gnme | null = null;
   private guestbook: Guestbook | null = null;
   private config: RaceConfig | null = null;
+  /** The cave chosen in Folio; Thread guides you to it until you jump or pick another. */
+  private thread: Gate | null = null;
   private jumping = false;
   private showGnme = false;
   private time = 0;
@@ -43,6 +47,7 @@ export class App {
   private fpsTime = 0;
   private fps = 0;
   private readonly tmpDir = new THREE.Vector3();
+  private readonly tmpMark = new THREE.Vector3();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -71,7 +76,13 @@ export class App {
     this.scene.add(this.hemi, this.sun, this.sun.target);
 
     this.controls = new FreeFlyControls(this.camera, canvas, this.input);
-    this.controls.onLockChange = (locked) => this.hud.setPaused(!locked && !!this.world);
+    this.controls.onLockChange = (locked) => this.hud.setPaused(!locked && !!this.world && !this.folio.isOpen);
+    this.folio.onClose = () => this.closeFolio();
+    this.folio.onSelect = (gate) => {
+      this.thread = gate;
+      this.folio.setSelected(gate.id);
+      this.closeFolio();
+    };
 
     // Heartbeat order each frame: read input → move camera → GNME + draw → forget one-shot presses.
     this.heartbeat
@@ -128,6 +139,8 @@ export class App {
     this.scene.add(this.view.group);
     this.applyPalette(this.view.palette);
     this.world = loaded;
+    this.thread = null;
+    this.folio.setWorld(loaded.page, loaded.layout, this.config?.target ?? '');
     this.gnme = new Gnme(this.camera, this.view.cells);
 
     const [x, y, z] = loaded.layout.arrival;
@@ -137,6 +150,7 @@ export class App {
     // the graphics card compile shaders in the background instead of freezing on the first frame.
     await this.gnme.wakeAround(this.camera.position);
     await this.renderer.compileAsync(this.scene, this.camera);
+    if (this.folio.isOpen) this.gnme.setLightsOut(true);
     this.hud.setPage(loaded.page.title, this.config?.target ?? '');
   }
 
@@ -151,6 +165,27 @@ export class App {
     this.sun.color.set(p.light.sun);
     this.sun.intensity = p.light.sunIntensity;
     this.sunDir.set(...p.light.sunDir).normalize();
+  }
+
+  /**
+   * Folio opens over the running world: nothing pauses (the Heartbeat, input and later physics
+   * keep ticking), the mouse is released, and since the world can't be seen GNME puts every
+   * cell to sleep and the 3D scene stops drawing.
+   */
+  private openFolio(): void {
+    this.folio.open();
+    this.gnme?.setLightsOut(true);
+    this.hud.setPaused(false);
+    this.controls.unlock();
+  }
+
+  /** Back to flying. If the browser won't recapture the mouse (e.g. closed with Esc), ask for a click. */
+  private closeFolio(): void {
+    this.folio.close();
+    this.gnme?.setLightsOut(false);
+    void this.controls.lock().then((ok) => {
+      if (!ok) this.hud.setPaused(!!this.world);
+    });
   }
 
   /** Dev hook: jump the camera (exposed as window.iow in dev builds). */
@@ -178,9 +213,58 @@ export class App {
       this.controls.setPose(p.x, 900, p.z, 0, -1.45);
     }
     if (this.world && this.input.wasPressed('gnme')) this.showGnme = !this.showGnme;
+    if (this.world && this.controls.enabled && this.input.wasPressed('folio')) {
+      if (this.folio.isOpen) this.closeFolio();
+      else this.openFolio();
+    }
     const ahead = this.gateAhead();
     if (ahead && this.input.wasPressed('jump')) void this.jump(ahead.target);
 
+    if (this.folio.isOpen) {
+      // Lights out: draw only Folio's map, not the hidden 3D world.
+      const fwd = this.camera.getWorldDirection(this.tmpDir);
+      const p = this.camera.position;
+      this.folio.update({ x: p.x, z: p.z, dirX: fwd.x, dirZ: fwd.z });
+    } else {
+      this.drawWorld();
+    }
+
+    this.fpsFrames++;
+    this.fpsTime += dt;
+    if (this.fpsTime >= 0.5) {
+      this.fps = Math.round(this.fpsFrames / this.fpsTime);
+      this.fpsFrames = 0;
+      this.fpsTime = 0;
+      this.updateHudStats();
+    }
+    if (this.world) this.hud.setGate(ahead?.target ?? null, !!ahead && ahead.id === this.thread?.id);
+    this.updateThread();
+  }
+
+  /** Thread: the HUD arrow and distance to the picked cave, and a marker over it when it's in view. */
+  private updateThread(): void {
+    const gate = this.thread;
+    if (!gate || this.folio.isOpen) {
+      this.hud.setThread(null);
+      this.hud.setThreadMark(null);
+      return;
+    }
+    const p = this.camera.position;
+    const fwd = this.camera.getWorldDirection(this.tmpDir);
+    const guide = threadGuide([p.x, p.y, p.z], [fwd.x, fwd.z], gate.center);
+    this.hud.setThread({ name: gate.target, distance: guide.distance, turn: guide.turn });
+
+    // Marker just above the cave mouth, only when it's in front of the camera and on screen.
+    const m = this.tmpMark.set(gate.center[0], gate.center[1] + gate.height / 2 + 1.5, gate.center[2]);
+    const ahead = (m.x - p.x) * fwd.x + (m.y - p.y) * fwd.y + (m.z - p.z) * fwd.z > 0;
+    m.project(this.camera);
+    const onScreen = ahead && Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1;
+    this.hud.setThreadMark(
+      onScreen ? { x: ((m.x + 1) / 2) * window.innerWidth, y: ((1 - m.y) / 2) * window.innerHeight, distance: guide.distance } : null,
+    );
+  }
+
+  private drawWorld(): void {
     // Thin the fog as the camera climbs so the bird's-eye view stays clear.
     if (this.palette) {
       const fog = this.scene.fog as THREE.Fog;
@@ -193,16 +277,6 @@ export class App {
     this.gnme?.frameUpdate();
     this.view?.update(this.time, this.camera.position);
     this.renderer.render(this.scene, this.camera);
-
-    this.fpsFrames++;
-    this.fpsTime += dt;
-    if (this.fpsTime >= 0.5) {
-      this.fps = Math.round(this.fpsFrames / this.fpsTime);
-      this.fpsFrames = 0;
-      this.fpsTime = 0;
-      this.updateHudStats();
-    }
-    if (this.world) this.hud.setGate(ahead?.target ?? null);
   }
 
   /** Keeps the shadow box centred on the camera, snapped to shadow-map texels so shadows don't shimmer. */
