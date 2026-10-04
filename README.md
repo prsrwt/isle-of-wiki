@@ -1,62 +1,108 @@
 # Isle of Wiki
 
-Wikipedia pod racing in low-poly origami canyons, inspired by Star Wars Episode I Racer.
-Every article becomes a race track. You start in the Seedpod (the arena, where the infobox's
-links are gates in the grandstand), and every section of the article is a canyon whose walls
-are lined with caves — one per link, in reading order — leading to other articles. Images and
-billboards stand trackside. Each page's world is picked by the engine: a structure (The Hidden
-Lotus, Vine or Lilypad) and a biome (Dune, Frost, Canopy, Ember or Relic). Race from a start
-article to a target article — no searching.
+**Wikipedia pod racing in folded-paper canyons.** Every Wikipedia article becomes a race
+track: its sections are canyons, its links are caves in the canyon walls, and driving through
+a cave takes you to the page it links to. Race from a start article to a target article, with
+no search box, only the links. Inspired by *Star Wars Episode I: Racer* and the Wikipedia game.
 
-## Run
+![Boosting at 358 km/h through the "Vehicles appearing in the Original Trilogy" canyon in the Dune biome](docs/media/hero.png)
+
+## How a page becomes a track
+
+- **The Seedpod** is the arena you arrive in. The article's infobox links are cave gates in
+  its grandstand.
+- **Each section is a canyon**, and the section's text runs along it as banners and gateways.
+- **Each link is a cave**, in reading order, with its target's name on a plaque above the mouth.
+  Pull up in front of one and press **J** to travel through it.
+- **Images and billboards** stand trackside.
+- **The engine picks the world** for each page: a *structure* (how the canyons are arranged:
+  The Hidden Lotus, Vine or Lilypad) and a *biome* (Dune, Frost, Canopy, Ember or Relic). The
+  first racer to reach a page decides its world for everyone in the room.
+
+![A Relic-biome canyon lined with link caves: Repulsorlift, Battle droid, Laser rangefinder](docs/media/caves.png)
+
+Worlds are fully deterministic. The same article gives every player (and, later, the server)
+exactly the same track, down to every rock.
+
+## Play
 
 ```sh
 npm install
-npm run dev        # http://localhost:5173
-npm test           # parser + layout tests (Node, same code the server will run)
-npm run typecheck
+npm run dev        # then open http://localhost:5173
 ```
 
-## Engines
+Pick a start page and a target page, build the world, click the canvas to take control.
 
-The game is built from named engines — see [docs/GLOSSARY.md](docs/GLOSSARY.md) for every name.
+| Key | Action |
+|---|---|
+| **W / S** | Throttle / brake, then reverse |
+| **A / D** | Steer: tight when slow, wider at speed, like a car |
+| **Space** | Brake |
+| **Shift** | Boost (the tank refills; run it dry and it locks out for a moment) |
+| **Mouse** | Orbit the chase camera (it swings back behind you on its own) |
+| **J** | Travel through the cave in front of you |
+| **Tab** | **Folio**: the article as text plus a zoomable map of the track; pick a link to set a **Thread** |
+| **R** | Respawn at the last safe spot |
+| **H** | Stats and controls |
+| **Esc** | Release the mouse |
+
+A gamepad works too: left stick steers, the triggers are throttle and brake, RB is boost and B
+brakes.
+
+Debug keys: **F** free-fly camera, **G** GNME roll call, **P** physics collider view,
+**B** (with P) drop test balls.
+
+## Develop
+
+```sh
+npm test           # 129 tests: parser, layouts, physics, pod handling, auto-driver on every track
+npm run typecheck
+npm run build
+```
+
+The tests include an auto-driver that drives every canyon of every structure end to end, and
+checks that every cave can be reached and every bridge crossed.
+
+### Project layout
+
+| Path | What lives there |
+|---|---|
+| `packages/shared` | Runs in the browser **and** (later) the server: Wikipedia parser, deterministic article → world layout, physics and pod handling, multiplayer protocol types |
+| `apps/client` | Three.js renderer, chase camera, HUD and Folio, input, Wikipedia API calls |
+| `docs/GLOSSARY.md` | Every named part of the game: engines, structures, biomes, track vocabulary |
+
+### Engines
+
+The game is built from named engines; [docs/GLOSSARY.md](docs/GLOSSARY.md) lists every name.
 
 | Engine | Job |
 |---|---|
 | **Heartbeat** | Fixed-step game loop (60 ticks/s), systems, entity registry, input actions |
-| **GNME** (Goodnight Moon Engine) | Puts unneeded world cells to sleep (Awake / Drowsy / Asleep), builds them nearest-first, generates tracks in a worker |
-| **Atlas** | Article → track: plug-in structures and biomes, Furnisher fills canyons |
+| **GNME** (Goodnight Moon Engine) | Puts world cells you can't see to sleep and wakes them nearest-first; builds tracks in a worker |
+| **Atlas** | Article → track: plug-in structures and biomes; the Furnisher fills canyons with caves and props |
 | **Guestbook** | Room memory: the first arrival on a page decides its world; everyone else shares it |
+| **Physics** | One Rapier world per page, built from the same layout the renderer draws |
+| **Pod** | The hover racer: deterministic arcade handling, hover over ground and bridges, solid rocks |
+| **Folio / Thread** | Article map overlay, and the HUD arrow guiding you to the link you picked |
 
-## Layout
+### Built with
 
-| Path | What lives there |
-|---|---|
-| `packages/shared` | Runs in browser **and** server: Wikipedia parser, deterministic page → world layout, multiplayer protocol types, world constants |
-| `apps/client` | Three.js renderer, controls, HUD, Wikipedia API calls, ad provider (`src/ads`) |
+- [Three.js](https://threejs.org/): toon shading with pencil hatching and ink outlines
+- [Rapier](https://rapier.rs/), the official **deterministic** WebAssembly build. Same inputs,
+  bit-identical results on every machine, so races can be re-checked and replayed.
+- TypeScript, Vite and Vitest, in an npm workspaces monorepo
 
-The world layout is deterministic (no `Math.random`, seeded by page title), so every player and
-the server build an identical map from the same article. Each world is determined by the article plus a `WorldSpec` (room seed, biome, structure). The ground is a heightfield (`WorldLayout.terrain`) and every prop is an oriented box
-(`WorldLayout.boxes`); the renderer draws exactly these, and the physics engine (Rapier's official
-deterministic build, `@isle-of-wiki/shared/physics`) turns the same data into colliders.
+The ground is a heightfield and every prop is an oriented box. The renderer draws exactly these
+and the physics engine collides with exactly these, so what you see is what you hit. The pod's
+handling uses only + − × ÷ and square roots, the operations every machine rounds identically.
 
 ## Roadmap
 
-1. ✅ Page → world generator with free-fly camera
-   - ✅ 1b-A: canyon country (islands, newspaper-column canyons, mesas/buttes, slot canyons, caves, cliff panels)
-   - ✅ 1b-B: origami ink style, starry void, halftone paintings, carved quotes, ad slots
-   - ✅ 1c-A: race track — heightfield terrain, arena + trunk + winding section canyons, arches, spires
-   - ✅ 1c-B: origami biomes per article (Dune, Frost, Canopy, Ember, Relic), arena dressing, shadows
-   - ✅ A: Heartbeat runtime + GNME (regions/chunks, sleep states, worker generation, article cache)
-   - ✅ B: Atlas — engine-picked structures (The Hidden Lotus, Vine, Lilypad) and biomes; Guestbook; floor text removed; shadows, crowds
-   - ✅ C: Folio article map + Thread navigation
-     - ✅ C1: Folio (Tab) — article text and zoomable track map, pick a link or cave
-     - ✅ C2: Thread — HUD arrow, distance and on-screen marker for the picked cave
-   - ✅ P: Petal layers — long Hidden Lotus petals grow outer lobes over shorter neighbours
-2. Pod + chase-camera driving (Rapier physics)
-   - ✅ 2A: physics world — every page's ground and props as solid colliders, stepped by Heartbeat (debug view: P, drop balls: B)
-   - ✅ 2B: hover pod — W/S throttle, A/D steer (car-like: tighter slow, wider fast), Space brake, Shift boost, mouse orbits the chase camera, R respawn, J travel through the cave in front of you; rocks, grandstands and walls are solid; top-bar dashboard (RPM, speed, boost); H for stats & controls (F free-fly for debugging)
-   - ✅ 2C: pod look and feel — origami paper pod that leans, dips and bobs; exhaust flames (white-hot on boost); wider view and wind streaks at speed; sparks and shake on scrapes; chase camera pulls in when a wall blocks the view
-3. Link tunnels + full single-player race
-4. Online multiplayer
-5. Polish (sound, minimap, themes, controls)
+1. ✅ **Page → world generator**: canyon country, origami ink style, five biomes, three
+   structures, GNME streaming, Folio map and Thread navigation
+2. ✅ **Pod and driving**: deterministic physics world, hover pod with chase camera,
+   dashboard, origami pod with speed and scrape effects
+3. **Link tunnels and a full single-player race**: hyperspace tunnel between pages, race
+   start, timer and finish
+4. **Online multiplayer**: rooms, the server validates cave claims against the deterministic layout
+5. **Polish**: sound, minimap, themes, rebindable controls
