@@ -14,5 +14,12 @@
     "linkedom": "^0.18.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-deterministic-compat": "^0.21.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./physics": "./src/physics.ts"
   }
 }

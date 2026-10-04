@@ -13,6 +13,7 @@ Use these names in code (folders, types, functions) and in issues.
 | **Guestbook** | Room memory: the first player to reach a page "signs" which biome and structure it gets (never the arriving player's current biome); everyone after reads it. Keyed by canonical article title. | `packages/shared/src/guestbook/` |
 | **Folio** | The article map overlay (Tab): the whole page, clickable links, "you are here". Opening it pauses nothing. | `apps/client/src/folio/` |
 | **Thread** | Navigation to the link you chose in Folio: HUD arrow + distance, a marker over the cave when it's in view, and the "Your cave" callout when you're close. | `packages/shared/src/thread/` (maths, link → cave), `apps/client/src/ui/hud.ts` |
+| **Physics** | One Rapier world per page, built from the same `WorldLayout` the renderer draws: the ground as a heightfield (laid out a quarter turn round so its triangles match the drawn ones), every prop as a box. Deterministic build, stepped by Heartbeat at 60 Hz. Debug view: **P** (props orange, ground cyan), **B** drops test balls. | `packages/shared/src/physics/` (import from `@isle-of-wiki/shared/physics`), `apps/client/src/physics/` (debug view) |
 
 ## Structures (Atlas layouts)
 

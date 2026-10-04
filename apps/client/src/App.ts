@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { Guestbook, Heartbeat, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
+import { PhysicsWorld } from '@isle-of-wiki/shared/physics';
 import { HouseAdProvider, type AdProvider } from './ads/AdProvider';
 import { FreeFlyControls } from './controls/FreeFlyControls';
 import { Folio } from './folio/Folio';
 import { Gnme, goodnightLines } from './gnme/Gnme';
 import { Input } from './heartbeat/Input';
+import { PhysicsDebug } from './physics/PhysicsDebug';
 import { startLoop } from './heartbeat/Loop';
 import type { BiomePalette } from './render/biomes';
 import { loadGlyphFont } from './render/glyphAtlas';
@@ -36,6 +38,8 @@ export class App {
   private view: WorldView | null = null;
   private world: LoadedWorld | null = null;
   private gnme: Gnme | null = null;
+  private physics: PhysicsWorld | null = null;
+  private physicsDebug: PhysicsDebug | null = null;
   private guestbook: Guestbook | null = null;
   private config: RaceConfig | null = null;
   /** The cave chosen in Folio; Thread guides you to it until you jump or pick another. */
@@ -84,8 +88,10 @@ export class App {
       this.closeFolio();
     };
 
-    // Heartbeat order each frame: read input → move camera → GNME + draw → forget one-shot presses.
+    // Heartbeat: physics steps at the fixed rate; then each frame, read input → move camera →
+    // GNME + draw → forget one-shot presses.
     this.heartbeat
+      .add({ name: 'physics', fixedUpdate: () => this.physics?.step() })
       .add({ name: 'input', frameUpdate: () => this.input.poll() })
       .add(this.controls)
       .add({ name: 'frame', frameUpdate: (dt) => this.frame(dt) })
@@ -133,6 +139,15 @@ export class App {
     const [article] = await Promise.all([fetchArticleHtml(title), loadGlyphFont()]);
     const signature = this.guestbook.arrive(article.title, from);
     const loaded = await loadWorld(article, this.guestbook.spec(signature));
+    const physics = await PhysicsWorld.create(loaded.layout);
+
+    const showPhysics = this.physicsDebug?.visible ?? false;
+    this.physicsDebug?.dispose();
+    this.physics?.dispose();
+    this.physics = physics;
+    this.physicsDebug = new PhysicsDebug(physics, loaded.layout.terrain);
+    this.physicsDebug.visible = showPhysics;
+    this.scene.add(this.physicsDebug.group);
 
     this.view?.dispose();
     this.view = new WorldView(loaded.layout, this.gradient, this.renderer.capabilities.getMaxAnisotropy(), this.ads);
@@ -213,6 +228,10 @@ export class App {
       this.controls.setPose(p.x, 900, p.z, 0, -1.45);
     }
     if (this.world && this.input.wasPressed('gnme')) this.showGnme = !this.showGnme;
+    if (this.physicsDebug && this.input.wasPressed('physics')) this.physicsDebug.visible = !this.physicsDebug.visible;
+    if (this.physicsDebug?.visible && this.controls.locked && this.input.wasPressed('drop')) {
+      this.physicsDebug.dropBall(this.camera.position, this.camera.getWorldDirection(this.tmpDir));
+    }
     if (this.world && this.controls.enabled && this.input.wasPressed('folio')) {
       if (this.folio.isOpen) this.closeFolio();
       else this.openFolio();
@@ -276,6 +295,7 @@ export class App {
 
     this.gnme?.frameUpdate();
     this.view?.update(this.time, this.camera.position);
+    this.physicsDebug?.update(this.camera.position);
     this.renderer.render(this.scene, this.camera);
   }
 

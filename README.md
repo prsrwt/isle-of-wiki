@@ -37,8 +37,8 @@ The game is built from named engines — see [docs/GLOSSARY.md](docs/GLOSSARY.md
 
 The world layout is deterministic (no `Math.random`, seeded by page title), so every player and
 the server build an identical map from the same article. Each world is determined by the article plus a `WorldSpec` (room seed, biome, structure). The ground is a heightfield (`WorldLayout.terrain`) and every prop is an oriented box
-(`WorldLayout.boxes`); the renderer draws exactly these, and the physics engine (Rapier, Phase 2)
-will use the same data as colliders.
+(`WorldLayout.boxes`); the renderer draws exactly these, and the physics engine (Rapier's official
+deterministic build, `@isle-of-wiki/shared/physics`) turns the same data into colliders.
 
 ## Roadmap
 
@@ -54,6 +54,9 @@ will use the same data as colliders.
      - ✅ C2: Thread — HUD arrow, distance and on-screen marker for the picked cave
    - ✅ P: Petal layers — long Hidden Lotus petals grow outer lobes over shorter neighbours
 2. Pod + first-person driving (Rapier physics)
+   - ✅ 2A: physics world — every page's ground and props as solid colliders, stepped by Heartbeat (debug view: P, drop balls: B)
+   - 2B: hover pod controller — thrust, steer, boost, hop mesas, drive into caves
+   - 2C: pod look and feel — origami pod, engine glow, speed effects, speedometer
 3. Link tunnels + full single-player race
 4. Online multiplayer
 5. Polish (sound, minimap, themes, controls)

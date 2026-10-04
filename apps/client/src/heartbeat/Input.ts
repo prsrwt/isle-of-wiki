@@ -2,7 +2,7 @@
  * Heartbeat input layer: keyboard and gamepad both map to the same named actions, so game
  * code asks "is boost held?" instead of "is Shift or RB held?".
  */
-export type Action = 'forward' | 'back' | 'left' | 'right' | 'up' | 'down' | 'boost' | 'overview' | 'gnme' | 'folio' | 'jump';
+export type Action = 'forward' | 'back' | 'left' | 'right' | 'up' | 'down' | 'boost' | 'overview' | 'gnme' | 'folio' | 'jump' | 'physics' | 'drop';
 
 const KEY_BINDINGS: Record<string, Action> = {
   KeyW: 'forward',
@@ -22,6 +22,8 @@ const KEY_BINDINGS: Record<string, Action> = {
   KeyG: 'gnme',
   Tab: 'folio',
   KeyJ: 'jump',
+  KeyP: 'physics',
+  KeyB: 'drop',
 };
 
 /** Standard-mapping gamepad buttons. */
