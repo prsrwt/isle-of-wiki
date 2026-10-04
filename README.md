@@ -31,7 +31,14 @@ npm install
 npm run dev        # then open http://localhost:5173
 ```
 
-Pick a start page and a target page, build the world, click the canvas to take control.
+Pick a start page and a target page and start the race. Click the world to take control: the
+countdown runs 3, 2, 1, GO and the clock starts. Every cave you drive through takes you down a
+**link tunnel** to the page it links to. Reach the target page and the clock stops; the finish
+card shows your time, your hops and the path you took, and remembers your best time for that
+pair of pages.
+
+Each trip through a tunnel costs exactly 2 seconds on the clock, however long the next page takes
+to download and build, so a slow connection never loses you the race.
 
 | Key | Action |
 |---|---|
@@ -41,6 +48,7 @@ Pick a start page and a target page, build the world, click the canvas to take c
 | **Shift** | Boost (the tank refills; run it dry and it locks out for a moment) |
 | **Mouse** | Orbit the chase camera (it swings back behind you on its own) |
 | **J** | Travel through the cave in front of you |
+| **WASD** in a tunnel | Drift the pod around the tube |
 | **Tab** | **Folio**: the article as text plus a zoomable map of the track; pick a link to set a **Thread** |
 | **R** | Respawn at the last safe spot |
 | **H** | Stats and controls |
@@ -55,7 +63,7 @@ Debug keys: **F** free-fly camera, **G** GNME roll call, **P** physics collider 
 ## Develop
 
 ```sh
-npm test           # 129 tests: parser, layouts, physics, pod handling, auto-driver on every track
+npm test           # 137 tests: parser, layouts, physics, pod handling, race rules, auto-driver on every track
 npm run typecheck
 npm run build
 ```
@@ -68,7 +76,7 @@ checks that every cave can be reached and every bridge crossed.
 | Path | What lives there |
 |---|---|
 | `packages/shared` | Runs in the browser **and** (later) the server: Wikipedia parser, deterministic article → world layout, physics and pod handling, multiplayer protocol types |
-| `apps/client` | Three.js renderer, chase camera, HUD and Folio, input, Wikipedia API calls |
+| `apps/client` | Three.js renderer, chase camera, link tunnel, HUD and Folio, input, Wikipedia API calls |
 | `docs/GLOSSARY.md` | Every named part of the game: engines, structures, biomes, track vocabulary |
 
 ### Engines
@@ -84,6 +92,8 @@ The game is built from named engines; [docs/GLOSSARY.md](docs/GLOSSARY.md) lists
 | **Physics** | One Rapier world per page, built from the same layout the renderer draws |
 | **Pod** | The hover racer: deterministic arcade handling, hover over ground and bridges, solid rocks |
 | **Folio / Thread** | Article map overlay, and the HUD arrow guiding you to the link you picked |
+| **Marshal** | The race rules: starting grid, countdown, race clock in ticks, hops, finish |
+| **Link tunnel** | The folded-paper tube you fly through between pages while the next world builds |
 
 ### Built with
 
@@ -102,7 +112,7 @@ handling uses only + − × ÷ and square roots, the operations every machine ro
    structures, GNME streaming, Folio map and Thread navigation
 2. ✅ **Pod and driving**: deterministic physics world, hover pod with chase camera,
    dashboard, origami pod with speed and scrape effects
-3. **Link tunnels and a full single-player race**: hyperspace tunnel between pages, race
-   start, timer and finish
+3. ✅ **Link tunnels and a full single-player race**: link tunnel between pages, starting
+   grid and countdown, race clock, finish card with your path and best time
 4. **Online multiplayer**: rooms, the server validates cave claims against the deterministic layout
 5. **Polish**: sound, minimap, themes, rebindable controls

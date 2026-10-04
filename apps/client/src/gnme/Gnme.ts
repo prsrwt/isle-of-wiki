@@ -68,7 +68,7 @@ export class Gnme implements System {
 
   /**
    * Good morning: build and wake everything `point` needs, nearest first, yielding a frame
-   * whenever the budget is spent so animations (loading screen, hyperspace) never stall.
+   * whenever the budget is spent so animations (loading screen, link tunnel) never stall.
    */
   async wakeAround(point: THREE.Vector3, budgetMs = 12): Promise<void> {
     const jobs = this.sleepers

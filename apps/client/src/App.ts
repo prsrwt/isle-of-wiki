@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Guestbook, Heartbeat, nearestGateInReach, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
+import { Guestbook, Heartbeat, Marshal, nearestGateInReach, RACE, SIM, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
 import { PhysicsWorld, POD } from '@isle-of-wiki/shared/physics';
 import { HouseAdProvider, type AdProvider } from './ads/AdProvider';
 import { FreeFlyControls } from './controls/FreeFlyControls';
@@ -12,16 +12,21 @@ import { PodFx } from './pod/PodFx';
 import { PodModel } from './pod/PodModel';
 import { PodDriver } from './pod/PodDriver';
 import { startLoop } from './heartbeat/Loop';
-import type { BiomePalette } from './render/biomes';
+import { PALETTES, type BiomePalette } from './render/biomes';
 import { loadGlyphFont } from './render/glyphAtlas';
 import { createToonGradient } from './render/materials';
 import { WorldView } from './render/WorldView';
+import { LinkTunnel } from './tunnel/LinkTunnel';
 import type { Hud } from './ui/hud';
 import { BIOME_NAMES, STRUCTURE_NAMES } from './ui/names';
 import { fetchArticleHtml } from './wiki/api';
 import { loadWorld, type LoadedWorld } from './wiki/loadWorld';
 
 const GATE_CALLOUT_RANGE = 70;
+/** The shortest ride through a link tunnel: what it costs on the race clock. */
+const TUNNEL_SECONDS = RACE.tunnelTicks / SIM.tickHz;
+/** "GO!" stays up this long after the countdown (ticks). */
+const GO_TICKS = SIM.tickHz;
 /** Half-size of the sun's shadow box around the camera (metres). */
 const SHADOW_RANGE = 220;
 
@@ -58,9 +63,14 @@ export class App {
   private physicsDebug: PhysicsDebug | null = null;
   private guestbook: Guestbook | null = null;
   private config: RaceConfig | null = null;
+  /** This race's rules and clock: the grid, countdown, time, hops and finish. */
+  private marshal: Marshal | null = null;
+  private readonly tunnel: LinkTunnel;
   /** The cave chosen in Folio; Thread guides you to it until you jump or pick another. */
   private thread: Gate | null = null;
   private jumping = false;
+  /** The last cave whose page was fetched ahead of time. */
+  private prefetched: string | null = null;
   private showGnme = false;
   private time = 0;
   private fpsFrames = 0;
@@ -101,10 +111,16 @@ export class App {
     this.controls.flying = false;
     this.podCamera = new PodCamera(this.camera);
     this.driver = new PodDriver(this.input);
-    this.driver.active = () => this.controls.locked && !this.folio.isOpen && !this.controls.flying && !this.jumping;
+    this.driver.active = () =>
+      this.controls.locked && !this.folio.isOpen && !this.controls.flying && !this.jumping && !!this.marshal?.canDrive;
     this.scene.add(this.podModel.group, this.camera);
     this.podFx = new PodFx(this.camera, this.scene);
-    this.controls.onLockChange = (locked) => this.hud.setPaused(!locked && !!this.world && !this.folio.isOpen);
+    this.tunnel = new LinkTunnel(this.gradient);
+    this.controls.onLockChange = (locked) => {
+      // Taking control on the starting grid starts the countdown.
+      if (locked && this.world && !this.controls.flying) this.marshal?.startCountdown();
+      this.hud.setPaused(!locked && !!this.world && !this.folio.isOpen && !this.hud.finishOpen);
+    };
     this.folio.onClose = () => this.closeFolio();
     this.folio.onSelect = (gate) => {
       this.thread = gate;
@@ -112,10 +128,11 @@ export class App {
       this.closeFolio();
     };
 
-    // Heartbeat: each fixed step, pod controls → physics → pod reads where it ended up (and
-    // whether it drove into a cave); then each frame, read input → look → camera, GNME + draw →
-    // forget one-shot presses.
+    // Heartbeat: each fixed step, the Marshal's clock → pod controls → physics → pod reads where
+    // it ended up (and whether it drove into a cave); then each frame, read input → look →
+    // camera, GNME + draw (or the link tunnel) → forget one-shot presses.
     this.heartbeat
+      .add({ name: 'marshal', fixedUpdate: () => this.marshal?.step() })
       .add(this.driver)
       .add({ name: 'physics', fixedUpdate: () => this.physics?.step() })
       .add({ name: 'pod-after', fixedUpdate: () => this.driver.afterPhysics() })
@@ -133,36 +150,88 @@ export class App {
     this.controls.enabled = enabled;
   }
 
-  /** Starts a race: a new room (its own Guestbook) and the start page, signed as the first arrival. */
+  /**
+   * Starts a race: a new room (its own Guestbook) and the start page, signed as the first
+   * arrival. The racer waits on the grid until they take control, then the countdown runs.
+   */
   async start(config: RaceConfig): Promise<void> {
+    this.hud.hideFinish();
+    this.hud.setCountdown('');
     this.config = config;
     this.guestbook = new Guestbook(config.roomSeed);
     await this.enter(config.start);
+    // Only now: a race started over a running one keeps its old Marshal until the new page is up.
+    this.marshal = new Marshal(config);
   }
 
   /**
-   * Goes through a cave to `target` (J in front of it, or J at any cave ahead while flying;
-   * the hyperspace tunnel arrives in Phase 3).
+   * Goes through a cave to `target` (J in front of it, or J at any cave ahead while flying),
+   * riding a link tunnel while the next page downloads and builds behind it. The ride costs
+   * the same on the clock however long that takes.
    * The Guestbook decides the world: whoever arrives first gets a biome other than the one
    * they came from; anyone later gets the same world.
    */
   async jump(target: string): Promise<void> {
-    if (!this.guestbook || !this.world || this.jumping) return;
+    const marshal = this.marshal;
+    if (!this.guestbook || !this.world || this.jumping || !marshal?.canDrive) return;
     this.jumping = true;
     this.driver.freeze();
-    this.hud.setStatus(`Jumping to ${target}…`);
+    // After the finish you can keep travelling; the Marshal just stops timing.
+    marshal.enterTunnel();
+    this.tunnel.begin(target, this.palette);
+    this.hud.setInTunnel(true);
+    const slow = setTimeout(() => (this.tunnel.waiting = true), (TUNNEL_SECONDS + 1.5) * 1000);
     try {
-      await this.enter(target, this.world.layout.biome);
+      await Promise.all([this.enter(target, this.world.layout.biome), this.tunnel.minimum(TUNNEL_SECONDS)]);
+      const won = marshal.arrive(this.world.page.title);
+      await this.tunnel.exit();
+      if (won && marshal === this.marshal) this.finishRace(marshal);
     } catch (err) {
-      this.hud.setStatus(`Couldn't reach ${target}: ${(err as Error).message}`);
+      marshal.abortTunnel();
+      await this.tunnel.exit();
       // Stay where you were and drive on.
+      this.hud.setInTunnel(false);
+      this.hud.setStatus(`Couldn't reach ${target}: ${(err as Error).message}`);
       this.driver.release();
       this.podCamera.reset();
       await new Promise((r) => setTimeout(r, 2500));
-    } finally {
       this.hud.setStatus(null);
+    } finally {
+      clearTimeout(slow);
+      this.hud.setInTunnel(false);
       this.jumping = false;
     }
+  }
+
+  /** Flag: the finish card, with the best time for this start and target remembered locally. */
+  private finishRace(marshal: Marshal): void {
+    const result = marshal.result();
+    if (!result) return;
+    const key = `iow.best:${marshal.config.start}\u2192${marshal.config.target}`;
+    let best: number | null = null;
+    try {
+      const stored = Number(localStorage.getItem(key));
+      if (stored > 0) best = stored;
+      if (best === null || result.timeMs < best) localStorage.setItem(key, String(result.timeMs));
+    } catch {
+      // No storage (private window): no best time.
+    }
+    this.hud.showFinish(result, best);
+    this.hud.setPaused(false);
+    this.controls.unlock();
+  }
+
+  /** Closes the finish card and drives on around the target page (untimed). */
+  keepExploring(): void {
+    this.hud.hideFinish();
+    void this.controls.lock().then((ok) => {
+      if (!ok) this.hud.setPaused(!!this.world);
+    });
+  }
+
+  /** The race being run (for "Race again"). */
+  get raceConfig(): RaceConfig | null {
+    return this.config;
   }
 
   /** Loads `title` as the Guestbook says: signed now if this room's first arrival (coming from biome `from`). */
@@ -170,6 +239,7 @@ export class App {
     if (!this.guestbook) return;
     const [article] = await Promise.all([fetchArticleHtml(title), loadGlyphFont()]);
     const signature = this.guestbook.arrive(article.title, from);
+    this.tunnel.setDestination(PALETTES[signature.biome]);
     const loaded = await loadWorld(article, this.guestbook.spec(signature));
     const physics = await PhysicsWorld.create(loaded.layout);
 
@@ -259,6 +329,7 @@ export class App {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.tunnel.resize(w / h);
   }
 
   /** Toggles the free-fly spectator camera (debug); the pod waits where it is meanwhile. */
@@ -320,7 +391,15 @@ export class App {
   private frame(dt: number, alpha: number): void {
     this.time += dt;
     if (this.world && this.input.wasPressed('info')) this.hud.toggleInfo();
-    if (this.world && this.controls.locked) {
+    this.updateRace();
+    if (this.tunnel.active) {
+      // In a link tunnel: the next world is being built behind it; draw only the tunnel.
+      this.tunnel.update(dt, this.controls.locked ? this.input.move() : { x: 0, y: 0 });
+      this.renderer.render(this.tunnel.scene, this.tunnel.camera);
+      return;
+    }
+    this.tunnel.fadeOut(dt);
+    if (this.world && this.controls.locked && !this.jumping) {
       if (this.input.wasPressed('fly')) this.toggleFly();
       if (!this.controls.flying && this.input.wasPressed('respawn')) {
         this.driver.respawn();
@@ -337,7 +416,7 @@ export class App {
     if (this.physicsDebug?.visible && this.controls.locked && this.input.wasPressed('drop')) {
       this.physicsDebug.dropBall(this.camera.position, this.camera.getWorldDirection(this.tmpDir));
     }
-    if (this.world && this.controls.enabled && this.input.wasPressed('folio')) {
+    if (this.world && this.controls.enabled && !this.jumping && this.input.wasPressed('folio')) {
       if (this.folio.isOpen) this.closeFolio();
       else this.openFolio();
     }
@@ -345,7 +424,12 @@ export class App {
     // J takes any cave ahead (debug).
     const reach = !this.controls.flying && this.world ? nearestGateInReach(this.world.layout.gates, [this.podPos.x, this.podPos.y, this.podPos.z]) : null;
     const ahead = reach ?? this.gateAhead();
-    const ready = !!ahead && (this.controls.flying || reach === ahead);
+    const ready = !!ahead && (this.controls.flying || reach === ahead) && !!this.marshal?.canDrive;
+    // Start downloading a cave's page as soon as you pull up in front of it: a shorter wait in the tunnel.
+    if (reach && reach.target !== this.prefetched) {
+      this.prefetched = reach.target;
+      fetchArticleHtml(reach.target).catch(() => {});
+    }
     if (ahead && ready && this.controls.locked && this.input.wasPressed('jump')) void this.jump(ahead.target);
 
     if (this.folio.isOpen) {
@@ -368,6 +452,19 @@ export class App {
     if (this.world) this.hud.setGate(ahead?.target ?? null, !!ahead && ahead.id === this.thread?.id, ready && !this.jumping);
     this.updateDash(dt);
     this.updateThread();
+  }
+
+  /** The race clock, and the big 3, 2, 1, GO! */
+  private updateRace(): void {
+    const m = this.marshal;
+    if (!m || !this.world) {
+      this.hud.setRace(null);
+      this.hud.setCountdown('');
+      return;
+    }
+    this.hud.setRace({ timeMs: m.timeMs, hops: m.hops, finished: m.phase === 'finished' });
+    const n = m.countdownNumber;
+    this.hud.setCountdown(n > 0 ? String(n) : m.phase === 'racing' && m.hops === 0 && m.ticks < GO_TICKS ? 'GO!' : '');
   }
 
   /** Thread: the HUD arrow and distance to the picked cave, and a marker over it when it's in view. */

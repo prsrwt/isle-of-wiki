@@ -38,6 +38,11 @@
         <div class="chip chip-target"><span class="chip-label">TARGET</span><span id="hud-target"></span></div>
       </div>
       <div class="hud-sub">
+        <div id="hud-race" class="chip chip-race hidden">
+          <span class="chip-label">TIME</span>
+          <span id="hud-race-time" class="race-time">0:00.00</span>
+          <span id="hud-race-hops" class="race-hops">0 hops</span>
+        </div>
         <div id="hud-thread" class="chip chip-thread hidden">
           <span class="chip-label">THREAD</span>
           <svg id="hud-thread-arrow" class="thread-arrow" viewBox="0 0 24 24" aria-hidden="true">
@@ -51,6 +56,7 @@
       <div id="hud-thread-mark" class="thread-mark hidden"><span id="hud-thread-mark-dist"></span></div>
       <div id="hud-gnme" class="gnme hidden"></div>
       <div id="hud-status" class="hud-status hidden"></div>
+      <div id="hud-countdown" class="countdown hidden"></div>
       <div class="crosshair"></div>
       <div id="hud-info" class="info-panel hidden">
         <section>
@@ -66,6 +72,7 @@
             <dt>Shift</dt><dd>boost</dd>
             <dt>Mouse</dt><dd>look around</dd>
             <dt>J</dt><dd>travel through the cave in front of you</dd>
+            <dt>WASD in a tunnel</dt><dd>drift the pod around the tube</dd>
             <dt>R</dt><dd>respawn at the last safe spot</dd>
             <dt>Tab</dt><dd>Folio: article map, pick a Thread</dd>
             <dt>H</dt><dd>this panel</dd>
@@ -113,14 +120,33 @@
       </div>
     </div>
 
+    <div id="tunnel-flash"></div>
+    <div id="tunnel-label" class="tunnel-label hidden">
+      <span class="chip-label">THROUGH THE LINK</span>
+      <strong id="tunnel-name"></strong>
+      <em id="tunnel-wait" class="hidden">still unfolding the page…</em>
+    </div>
+
+    <div id="finish" class="panel finish hidden">
+      <p class="finish-flag">FINISHED</p>
+      <p id="finish-time" class="finish-time"></p>
+      <p class="finish-meta"><span id="finish-hops"></span> · <span id="finish-best"></span></p>
+      <ol id="finish-path" class="finish-path"></ol>
+      <div class="row">
+        <button type="button" id="finish-explore" class="secondary">Keep exploring</button>
+        <button type="button" id="finish-again" class="secondary">Race again</button>
+        <button type="button" id="finish-new">New race</button>
+      </div>
+    </div>
+
     <div id="paused" class="hidden">
-      <span>Click the world to drive</span>
+      <span id="paused-text">Click the world to drive</span>
       <button id="open-menu" type="button">Change pages</button>
     </div>
 
     <div id="menu" class="panel">
       <h1>ISLE OF WIKI</h1>
-      <p class="sub">Wikipedia pod racing · world preview</p>
+      <p class="sub">Race from one article to another, through its links</p>
       <form id="race-form">
         <label>
           Start page
@@ -134,7 +160,7 @@
         <datalist id="suggest-target"></datalist>
         <div class="row">
           <button type="button" id="random-start" class="secondary">Random start</button>
-          <button type="submit" id="go">Build world</button>
+          <button type="submit" id="go">Start race</button>
         </div>
       </form>
       <p id="status" role="status"></p>
