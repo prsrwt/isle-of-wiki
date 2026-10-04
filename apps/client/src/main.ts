@@ -12,6 +12,13 @@ const goButton = document.getElementById('go') as HTMLButtonElement;
 const randomButton = document.getElementById('random-start') as HTMLButtonElement;
 const status = document.getElementById('status') as HTMLParagraphElement;
 const openMenu = document.getElementById('open-menu') as HTMLButtonElement;
+const finishExplore = document.getElementById('finish-explore') as HTMLButtonElement;
+const finishAgain = document.getElementById('finish-again') as HTMLButtonElement;
+const finishNew = document.getElementById('finish-new') as HTMLButtonElement;
+
+const GRID_PROMPT = 'Click the world to start the countdown';
+/** A fresh room each race: its seed decides which biome and structure every page becomes. */
+const newRoomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const hud = new Hud();
 const app = new App(canvas, hud);
@@ -63,12 +70,11 @@ form.addEventListener('submit', async (e) => {
     startInput.value = start;
     targetInput.value = target;
     setStatus(`Building "${start}"…`);
-    // A fresh room each race: its seed decides which biome and structure every page becomes.
-    await app.start({ start, target, roomSeed: Math.floor(Math.random() * 2 ** 31) });
+    await app.start({ start, target, roomSeed: newRoomSeed() });
     setStatus('');
     menu.classList.add('hidden');
     app.setInputEnabled(true);
-    hud.setPaused(true);
+    hud.setPaused(true, GRID_PROMPT);
   } catch (err) {
     setStatus((err as Error).message, true);
   } finally {
@@ -76,9 +82,33 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-openMenu.addEventListener('click', () => {
+function showMenu(): void {
   app.setInputEnabled(false);
   hud.setPaused(false);
+  hud.hideFinish();
   menu.classList.remove('hidden');
   startInput.focus();
+}
+
+openMenu.addEventListener('click', showMenu);
+finishNew.addEventListener('click', showMenu);
+finishExplore.addEventListener('click', () => app.keepExploring());
+
+// Same two pages, a new room: every page may become a different world this time.
+finishAgain.addEventListener('click', async () => {
+  const config = app.raceConfig;
+  if (!config) return;
+  finishAgain.disabled = true;
+  hud.hideFinish();
+  hud.setStatus(`Building "${config.start}"…`);
+  try {
+    await app.start({ ...config, roomSeed: newRoomSeed() });
+    hud.setPaused(true, GRID_PROMPT);
+  } catch (err) {
+    setStatus((err as Error).message, true);
+    showMenu();
+  } finally {
+    hud.setStatus(null);
+    finishAgain.disabled = false;
+  }
 });

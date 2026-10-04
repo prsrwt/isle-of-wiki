@@ -35,7 +35,7 @@ interface ParseResponse {
   parse?: { title: string; text: string };
 }
 
-/** Recently fetched articles, so revisiting a page (or a prefetch, in Phase 3) costs no download. */
+/** Recently fetched articles, so revisiting a page (or one prefetched when you pull up at its cave) costs no download. */
 const ARTICLE_CACHE_SIZE = 24;
 const articleCache = new Map<string, Promise<{ title: string; html: string }>>();
 

@@ -1,3 +1,5 @@
+import { formatRaceTime, type RaceResult } from '@isle-of-wiki/shared';
+
 /** "340 m" or "1.2 km". */
 export function formatDistance(m: number): string {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
@@ -26,6 +28,7 @@ export class Hud {
   private readonly rpmCells: HTMLElement[] = [];
   private lastDash = '';
   private readonly paused = $('paused');
+  private readonly pausedText = $('paused-text');
   private readonly gnme = $('hud-gnme');
   private readonly status = $('hud-status');
   private readonly thread = $('hud-thread');
@@ -34,6 +37,17 @@ export class Hud {
   private readonly threadDist = $('hud-thread-dist');
   private readonly threadMark = $('hud-thread-mark');
   private readonly threadMarkDist = $('hud-thread-mark-dist');
+  private readonly race = $('hud-race');
+  private readonly raceTime = $('hud-race-time');
+  private readonly raceHops = $('hud-race-hops');
+  private readonly countdown = $('hud-countdown');
+  private readonly finish = $('finish');
+  private readonly finishTime = $('finish-time');
+  private readonly finishBest = $('finish-best');
+  private readonly finishHops = $('finish-hops');
+  private readonly finishPath = $('finish-path');
+  private lastRace = '';
+  private lastCountdown = '';
   private lastGate = '';
   private lastThread = '';
   private lastMark = '';
@@ -131,6 +145,56 @@ export class Hud {
     this.threadMarkDist.textContent = formatDistance(at.distance);
   }
 
+  /** The race clock and hop count; null hides them. `finished` freezes the clock in gold. */
+  setRace(r: { timeMs: number; hops: number; finished: boolean } | null): void {
+    const time = r ? formatRaceTime(r.timeMs) : '';
+    const key = r ? `${time}|${r.hops}|${r.finished}` : '';
+    if (key === this.lastRace) return;
+    this.lastRace = key;
+    this.race.classList.toggle('hidden', !r);
+    if (!r) return;
+    this.raceTime.textContent = time;
+    this.raceHops.textContent = `${r.hops} ${r.hops === 1 ? 'hop' : 'hops'}`;
+    this.race.classList.toggle('is-finished', r.finished);
+  }
+
+  /** The big countdown: "3", "2", "1", "GO!" or "" to hide. Each new word pops in. */
+  setCountdown(text: string): void {
+    if (text === this.lastCountdown) return;
+    this.lastCountdown = text;
+    this.countdown.classList.toggle('hidden', !text);
+    this.countdown.textContent = text;
+    this.countdown.classList.toggle('is-go', text === 'GO!');
+    // Restart the pop animation.
+    this.countdown.style.animation = 'none';
+    void this.countdown.offsetWidth;
+    this.countdown.style.animation = '';
+  }
+
+  /** The finish card: time, hops, the path taken, and the best time for these two pages. */
+  showFinish(result: RaceResult, bestMs: number | null): void {
+    this.finishTime.textContent = formatRaceTime(result.timeMs);
+    const isBest = bestMs === null || result.timeMs <= bestMs;
+    this.finishBest.textContent = isBest ? 'New best for this race!' : `Best ${formatRaceTime(bestMs)}`;
+    this.finishBest.classList.toggle('is-best', isBest);
+    this.finishHops.textContent = `${result.hops} ${result.hops === 1 ? 'hop' : 'hops'}`;
+    this.finishPath.replaceChildren(...result.path.map((page) => Object.assign(document.createElement('li'), { textContent: page })));
+    this.finish.classList.remove('hidden');
+  }
+
+  hideFinish(): void {
+    this.finish.classList.add('hidden');
+  }
+
+  get finishOpen(): boolean {
+    return !this.finish.classList.contains('hidden');
+  }
+
+  /** Hides the cave callout, Thread and dashboard while travelling through a link tunnel. */
+  setInTunnel(on: boolean): void {
+    this.root.classList.toggle('in-tunnel', on);
+  }
+
   /** GNME's bedtime roll call, or null to hide it. */
   setGnme(lines: string[] | null): void {
     this.gnme.classList.toggle('hidden', !lines);
@@ -149,7 +213,9 @@ export class Hud {
     this.status.textContent = text ?? '';
   }
 
-  setPaused(paused: boolean): void {
+  /** The "click to drive" bar; `text` changes its prompt (e.g. on the starting grid). */
+  setPaused(paused: boolean, text = 'Click the world to drive'): void {
     this.paused.classList.toggle('hidden', !paused);
+    this.pausedText.textContent = text;
   }
 }
