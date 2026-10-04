@@ -105,12 +105,18 @@ export const lilypad: Structure = {
       return [isl.cx + Math.cos(ang) * isl.ax * wob, isl.cz + Math.sin(ang) * isl.az * wob];
     };
     const angleTo = (from: Island, to: Island) => Math.atan2(to.cz - from.cz, to.cx - from.cx);
+    /**
+     * The loop's own angle parameter for the point lying in direction `ang` from the island's
+     * centre. The loop is an ellipse, so these only agree on its axes; bridges run along the
+     * line between centres, and their canyons must meet the loop on that same line.
+     */
+    const loopAngle = (isl: Island, ang: number) => Math.atan2(isl.ax * Math.sin(ang), isl.az * Math.cos(ang));
 
     ctx.sections.forEach((s, i) => {
       const isl = islands[i + 1];
       const prev = islands[i];
       // The loop starts where the bridge from the previous island lands, and runs round.
-      const start = angleTo(isl, prev);
+      const start = loopAngle(isl, angleTo(isl, prev));
       const n = Math.ceil((2 * Math.PI * Math.max(isl.ax, isl.az)) / STEP);
       const pts: Vec2[] = [];
       for (let k = 0; k <= n; k++) pts.push(loopPoint(isl, start + (2 * Math.PI * k) / n));
@@ -123,10 +129,11 @@ export const lilypad: Structure = {
       // Where the bridge onward leaves the loop, keep its outer wall clear of caves.
       const next = islands[i + 2];
       if (next) {
-        const exit = angleTo(isl, next);
+        const exitAng = angleTo(isl, next);
+        const exit = loopAngle(isl, exitAng);
         const exitS = (((exit - start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * len;
         const p = loop.at(exitS);
-        const out: Vec2 = [Math.cos(exit), Math.sin(exit)];
+        const out: Vec2 = [Math.cos(exitAng), Math.sin(exitAng)];
         const side = p.r[0] * out[0] + p.r[1] * out[1] > 0 ? 1 : -1;
         track.blocks.push({ side, sa: exitS - DECK_HALF - 20, sb: exitS + DECK_HALF + 20 });
       }
@@ -142,8 +149,9 @@ export const lilypad: Structure = {
       const a = islands[i];
       const b = islands[i + 1];
       const ang = angleTo(a, b);
-      const from: Vec2 = i === 0 ? [a.cx, a.cz] : loopPoint(a, ang);
-      const to = loopPoint(b, ang + Math.PI);
+      // Both ends on the line between centres, so the canyon and the deck line up.
+      const from: Vec2 = i === 0 ? [a.cx, a.cz] : loopPoint(a, loopAngle(a, ang));
+      const to = loopPoint(b, loopAngle(b, ang + Math.PI));
       const connector = new Path([from, to], () => 0);
       carves.push({ path: connector, half: DECK_HALF });
       const dir: Vec2 = [Math.cos(ang), Math.sin(ang)];

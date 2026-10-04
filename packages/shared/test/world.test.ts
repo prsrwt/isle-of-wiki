@@ -281,3 +281,29 @@ describe('Hidden Lotus petal layers', () => {
     }
   }, 60_000);
 });
+
+describe('Lilypad bridges', () => {
+  const page = parseFixture();
+  it.each([1, 7, 42, 99] as const)('land on canyon floor at both ends, never against a cliff (room %i)', (roomSeed) => {
+    for (const biome of ['dune', 'frost', 'canopy', 'ember', 'relic'] as const) {
+      const layout = layoutPage(page, { roomSeed, biome, structure: 'lilypad' });
+      for (const b of layout.boxes) {
+        if (b.kind !== 'bridge') continue;
+        const [, qy, , qw] = b.rot ?? [0, 0, 0, 1];
+        const yaw = 2 * Math.atan2(qy, qw);
+        const ax = Math.sin(yaw);
+        const az = Math.cos(yaw);
+        const deckTop = b.center[1] + b.size[1] / 2;
+        for (const end of [-1, 1]) {
+          // Just past the deck's end, across its whole width.
+          for (const across of [-6, 0, 6]) {
+            const d = end * (b.size[2] / 2 + 3);
+            const x = b.center[0] + ax * d + az * across;
+            const z = b.center[2] + az * d - ax * across;
+            expect(Math.abs(terrainHeight(layout.terrain, x, z) - deckTop), `${biome} bridge at ${b.center[0].toFixed(0)},${b.center[2].toFixed(0)}`).toBeLessThan(4);
+          }
+        }
+      }
+    }
+  });
+});

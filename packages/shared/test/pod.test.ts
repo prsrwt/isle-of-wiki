@@ -436,14 +436,7 @@ describe('Driving real tracks', () => {
     expect(report).toEqual([]);
   }, 300_000);
 
-  /**
-   * KNOWN BUG (Atlas/Lilypad, found in Phase 2B): on each of these pages one bridge's far end
-   * lands on a plateau rim 25–50 m up instead of its island's canyon floor, so the deck runs
-   * into a cliff. Empty this list when the Lilypad layout is fixed.
-   */
-  const BROKEN_BRIDGES: Record<string, string[]> = { ember: ['-230,-837'], relic: ['-201,-790'] };
-
-  it.each(['ember', 'relic'] as const)('an auto-driver can cross every Lilypad bridge (%s), apart from the known broken ones', async (biome) => {
+  it.each(['ember', 'relic'] as const)('an auto-driver can cross every Lilypad bridge (%s), both ways', async (biome) => {
     const layout = layoutPage(page, { roomSeed: 42, biome, structure: 'lilypad' });
     const w = await PhysicsWorld.create(layout);
     const failed: string[] = [];
@@ -466,6 +459,6 @@ describe('Driving real tracks', () => {
       }
     }
     w.dispose();
-    expect(failed).toEqual(BROKEN_BRIDGES[biome]);
+    expect(failed).toEqual([]);
   }, 300_000);
 });
