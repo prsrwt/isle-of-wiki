@@ -112,6 +112,8 @@ export class Pod {
   supported = false;
   /** Touching a wall or prop that is slowing it down. */
   scraping = false;
+  /** While scraping: the horizontal direction (unit x, z) the wall pushed the pod — away from the wall. */
+  scrapePush: Vec2 = [0, 0];
   boosting = false;
   /** Tank ran dry: no boost until it refills to `POD.boostRearm`. */
   boostLocked = false;
@@ -160,7 +162,12 @@ export class Pod {
       // Scraping: a wall or prop changed the horizontal velocity we set last step.
       const dx = vx - this.want[0];
       const dz = vz - this.want[2];
-      this.scraping = dx * dx + dz * dz > SCRAPE_SQ;
+      const pushSq = dx * dx + dz * dz;
+      this.scraping = pushSq > SCRAPE_SQ;
+      if (this.scraping) {
+        const len = Math.sqrt(pushSq);
+        this.scrapePush = [dx / len, dz / len];
+      }
       // Hitting a slope or a prop's edge must not launch the pod upward (it would drive up
       // canyon walls like ramps): only the hover lifts it. Contacts can still stop it. (The
       // tolerance covers the physics engine handing velocities back in 32-bit precision.)

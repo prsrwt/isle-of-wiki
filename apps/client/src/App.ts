@@ -8,7 +8,8 @@ import { Gnme, goodnightLines } from './gnme/Gnme';
 import { Input } from './heartbeat/Input';
 import { PhysicsDebug } from './physics/PhysicsDebug';
 import { PodCamera } from './pod/PodCamera';
-import { createPodModel } from './pod/PodModel';
+import { PodFx } from './pod/PodFx';
+import { PodModel } from './pod/PodModel';
 import { PodDriver } from './pod/PodDriver';
 import { startLoop } from './heartbeat/Loop';
 import type { BiomePalette } from './render/biomes';
@@ -36,7 +37,14 @@ export class App {
   private readonly folio = new Folio();
   private readonly driver: PodDriver;
   private readonly podCamera: PodCamera;
-  private readonly podMesh = createPodModel(this.gradient);
+  private readonly podModel = new PodModel(this.gradient);
+  private readonly podFx: PodFx;
+  /** Pod's drawn yaw last frame and its smoothed turn rate, for leaning into turns. */
+  private podYaw = 0;
+  private turnRate = 0;
+  private readonly contact = new THREE.Vector3();
+  private readonly push = new THREE.Vector2();
+  private readonly away = new THREE.Vector3();
   /** Smoothed engine revs for the RPM bar, 0..1. */
   private rpm = 0;
   private readonly hemi = new THREE.HemisphereLight();
@@ -94,7 +102,8 @@ export class App {
     this.podCamera = new PodCamera(this.camera);
     this.driver = new PodDriver(this.input);
     this.driver.active = () => this.controls.locked && !this.folio.isOpen && !this.controls.flying && !this.jumping;
-    this.scene.add(this.podMesh);
+    this.scene.add(this.podModel.group, this.camera);
+    this.podFx = new PodFx(this.camera, this.scene);
     this.controls.onLockChange = (locked) => this.hud.setPaused(!locked && !!this.world && !this.folio.isOpen);
     this.folio.onClose = () => this.closeFolio();
     this.folio.onSelect = (gate) => {
@@ -269,9 +278,43 @@ export class App {
   /** Camera and pod model at the pod's pose, blended `alpha` of the way between physics steps. */
   private placeCamera(dt: number, alpha: number): void {
     this.driver.pose(alpha, this.podPos, this.podHeading);
-    this.podMesh.position.copy(this.podPos);
-    this.podMesh.rotation.y = Math.atan2(-this.podHeading.x, -this.podHeading.y);
-    if (!this.controls.flying) this.podCamera.update(dt, this.podPos, this.podHeading, this.controls.look);
+    const yaw = Math.atan2(-this.podHeading.x, -this.podHeading.y);
+    this.podModel.group.position.copy(this.podPos);
+    this.podModel.group.rotation.y = yaw;
+
+    // Turn rate seen on screen (yaw grows to the left), smoothed, for leaning into turns.
+    if (dt > 0) {
+      let d = this.podYaw - yaw;
+      d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+      this.turnRate += (d / dt - this.turnRate) * (1 - Math.exp(-8 * dt));
+    }
+    this.podYaw = yaw;
+
+    const pod = this.driver.current;
+    const input = this.driver.lastInput;
+    const speed = pod ? Math.min(1, Math.abs(pod.forwardSpeed()) / POD.boostSpeed) : 0;
+    this.podModel.update(dt, {
+      throttle: input.throttle,
+      speed,
+      turnRate: this.turnRate,
+      boosting: !!pod?.boosting,
+      braking: !!input.brake,
+    });
+    if (this.controls.flying || !pod) {
+      this.podFx.update(dt, null);
+      return;
+    }
+    this.podCamera.update(dt, this.podPos, this.podHeading, this.controls.look, (from, dir, max) => {
+      const hit = this.physics?.castRay([from.x, from.y, from.z], [dir.x, dir.y, dir.z], max, 'all');
+      return hit ? hit.distance : null;
+    });
+    // Sparks where the pod meets the wall: from the pod's middle, look along the wall's push
+    // (reversed) for the pod's edge — the side for a side swipe, the engine tips head-on.
+    this.push.set(pod.scrapePush[0], pod.scrapePush[1]);
+    this.away.set(-this.push.x, 0, -this.push.y);
+    const hit = pod.scraping ? this.physics?.castRay([this.podPos.x, this.podPos.y, this.podPos.z], [this.away.x, 0, this.away.z], 8, 'all') : null;
+    this.contact.copy(this.podPos).addScaledVector(this.away, hit ? hit.distance : 2.3);
+    this.podFx.update(dt, { speed, mps: Math.abs(pod.forwardSpeed()), scraping: pod.scraping, contact: this.contact, push: this.push });
   }
 
   private frame(dt: number, alpha: number): void {

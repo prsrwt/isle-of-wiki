@@ -56,7 +56,7 @@ deterministic build, `@isle-of-wiki/shared/physics`) turns the same data into co
 2. Pod + chase-camera driving (Rapier physics)
    - ✅ 2A: physics world — every page's ground and props as solid colliders, stepped by Heartbeat (debug view: P, drop balls: B)
    - ✅ 2B: hover pod — W/S throttle, A/D steer (car-like: tighter slow, wider fast), Space brake, Shift boost, mouse orbits the chase camera, R respawn, J travel through the cave in front of you; rocks, grandstands and walls are solid; top-bar dashboard (RPM, speed, boost); H for stats & controls (F free-fly for debugging)
-   - 2C: pod look and feel — origami pod, engine glow, speed effects, speedometer
+   - ✅ 2C: pod look and feel — origami paper pod that leans, dips and bobs; exhaust flames (white-hot on boost); wider view and wind streaks at speed; sparks and shake on scrapes; chase camera pulls in when a wall blocks the view
 3. Link tunnels + full single-player race
 4. Online multiplayer
 5. Polish (sound, minimap, themes, controls)
