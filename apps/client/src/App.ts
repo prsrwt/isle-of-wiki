@@ -15,6 +15,7 @@ import { startLoop } from './heartbeat/Loop';
 import { PALETTES, type BiomePalette } from './render/biomes';
 import { loadGlyphFont } from './render/glyphAtlas';
 import { createToonGradient } from './render/materials';
+import { RenderScale } from './render/RenderScale';
 import { WorldView } from './render/WorldView';
 import { LinkTunnel } from './tunnel/LinkTunnel';
 import type { Hud } from './ui/hud';
@@ -23,6 +24,8 @@ import { fetchArticleHtml } from './wiki/api';
 import { loadWorld, type LoadedWorld } from './wiki/loadWorld';
 
 const GATE_CALLOUT_RANGE = 70;
+/** Waits for the next frame, so heavy steps of building a world don't all land in one. */
+const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 /** The shortest ride through a link tunnel: what it costs on the race clock. */
 const TUNNEL_SECONDS = RACE.tunnelTicks / SIM.tickHz;
 /** "GO!" stays up this long after the countdown (ticks). */
@@ -32,6 +35,7 @@ const SHADOW_RANGE = 220;
 
 export class App {
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly renderScale: RenderScale;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(75, 1, 0.3, 6000);
   private readonly input = new Input();
@@ -86,7 +90,10 @@ export class App {
     private readonly hud: Hud,
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderScale = new RenderScale(this.renderer);
+    // Checking every shader for errors makes the driver finish compiling it on the spot; only
+    // worth it while developing.
+    this.renderer.debug.checkShaderErrors = import.meta.env.DEV;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -116,6 +123,8 @@ export class App {
     this.scene.add(this.podModel.group, this.camera);
     this.podFx = new PodFx(this.camera, this.scene);
     this.tunnel = new LinkTunnel(this.gradient);
+    // Get the tunnel ready to draw now, not on the first trip (it would stall as you go in).
+    void this.warmUpTunnel();
     this.controls.onLockChange = (locked) => {
       // Taking control on the starting grid starts the countdown.
       if (locked && this.world && !this.controls.flying) this.marshal?.startCountdown();
@@ -242,15 +251,16 @@ export class App {
     this.tunnel.setDestination(PALETTES[signature.biome]);
     const loaded = await loadWorld(article, this.guestbook.spec(signature));
     const physics = await PhysicsWorld.create(loaded.layout);
+    // The rest is built a step per frame, so the link tunnel keeps flowing meanwhile.
+    await nextFrame();
 
     const showPhysics = this.physicsDebug?.visible ?? false;
     this.physicsDebug?.dispose();
+    this.physicsDebug = null;
     this.physics?.dispose();
     this.physics = physics;
-    this.physicsDebug = new PhysicsDebug(physics, loaded.layout.terrain);
-    this.physicsDebug.visible = showPhysics;
-    this.scene.add(this.physicsDebug.group);
     this.driver.attach(physics, loaded.layout.arrival, loaded.layout.arrivalDir);
+    await nextFrame();
 
     this.view?.dispose();
     this.view = new WorldView(loaded.layout, this.gradient, this.renderer.capabilities.getMaxAnisotropy(), this.ads);
@@ -258,6 +268,8 @@ export class App {
     this.applyPalette(this.view.palette);
     this.world = loaded;
     this.thread = null;
+    if (showPhysics) this.togglePhysicsDebug();
+    await nextFrame();
     this.folio.setWorld(loaded.page, loaded.layout, this.config?.target ?? '');
     this.gnme = new Gnme(this.camera, this.view.cells);
 
@@ -276,6 +288,27 @@ export class App {
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.folio.isOpen) this.gnme.setLightsOut(true);
     this.hud.setPage(loaded.page.title, this.config?.target ?? '');
+  }
+
+  /**
+   * Compiles the link tunnel's shaders and draws it once (under the menu, before any world
+   * exists), so the graphics driver has finished its first-use work before the first trip.
+   * It has to be drawn to the screen itself: off screen uses different shader variants.
+   */
+  private async warmUpTunnel(): Promise<void> {
+    await this.renderer.compileAsync(this.tunnel.scene, this.tunnel.camera);
+    if (!this.world) this.renderer.render(this.tunnel.scene, this.tunnel.camera);
+  }
+
+  /** The physics debug view (P), built the first time it's shown on each page. */
+  private togglePhysicsDebug(): void {
+    if (!this.physics || !this.world) return;
+    if (!this.physicsDebug) {
+      this.physicsDebug = new PhysicsDebug(this.physics, this.world.layout.terrain);
+      this.physicsDebug.visible = false;
+      this.scene.add(this.physicsDebug.group);
+    }
+    this.physicsDebug.visible = !this.physicsDebug.visible;
   }
 
   /** Sky, fog and light for the world's biome. */
@@ -326,7 +359,7 @@ export class App {
   private resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
+    this.renderScale.resize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.tunnel.resize(w / h);
@@ -412,7 +445,7 @@ export class App {
       this.controls.setPose(p.x, 900, p.z, 0, -1.45);
     }
     if (this.world && this.input.wasPressed('gnme')) this.showGnme = !this.showGnme;
-    if (this.physicsDebug && this.input.wasPressed('physics')) this.physicsDebug.visible = !this.physicsDebug.visible;
+    if (this.physics && this.input.wasPressed('physics')) this.togglePhysicsDebug();
     if (this.physicsDebug?.visible && this.controls.locked && this.input.wasPressed('drop')) {
       this.physicsDebug.dropBall(this.camera.position, this.camera.getWorldDirection(this.tmpDir));
     }
@@ -440,6 +473,8 @@ export class App {
     } else {
       this.drawWorld();
     }
+    // Only frames spent driving the world tell whether it's too much to draw.
+    this.renderScale.frame(dt, !this.folio.isOpen && !this.jumping && !!this.world && this.controls.locked);
 
     this.fpsFrames++;
     this.fpsTime += dt;
@@ -561,6 +596,7 @@ export class App {
     const g = this.gnme?.stats();
     const rows: [string, string][] = [
       ['Frame rate', `${this.fps} fps`],
+      ['Resolution', `${this.renderer.domElement.width} × ${this.renderer.domElement.height} (${Math.round(this.renderScale.share * 100)}%)`],
       ['Page', page.title],
       ['World', `${STRUCTURE_NAMES[layout.structure]} · ${BIOME_NAMES[layout.biome]}`],
       ['Size', `${Math.round(maxX - minX)} × ${Math.round(maxZ - minZ)} m`],

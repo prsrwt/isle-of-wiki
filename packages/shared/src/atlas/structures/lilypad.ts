@@ -131,14 +131,27 @@ export const lilypad: Structure = {
       if (next) {
         const exitAng = angleTo(isl, next);
         const exit = loopAngle(isl, exitAng);
-        const exitS = (((exit - start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * len;
+        // Arc length along the loop to the exit. The loop is an oval, so the share of the angle
+        // isn't the share of the length: find the loop point nearest the exit instead.
+        const [ex, ez] = loopPoint(isl, exit);
+        let k = 0;
+        for (let j = 1; j < loop.xs.length; j++) {
+          if (Math.hypot(loop.xs[j] - ex, loop.zs[j] - ez) < Math.hypot(loop.xs[k] - ex, loop.zs[k] - ez)) k = j;
+        }
+        const exitS = loop.ss[k];
         const p = loop.at(exitS);
         const out: Vec2 = [Math.cos(exitAng), Math.sin(exitAng)];
         const side = p.r[0] * out[0] + p.r[1] * out[1] > 0 ? 1 : -1;
         track.blocks.push({ side, sa: exitS - DECK_HALF - 20, sb: exitS + DECK_HALF + 20 });
+        track.exits = [{ sa: exitS - DECK_HALF, sb: exitS + DECK_HALF }];
+        // The gateway's pillars stand at the walls: keep them out of the bridge's mouth.
+        const clearance = DECK_HALF + 8;
+        if (Math.abs(exitS - track.gatewayS) < clearance) track.gatewayS = exitS - clearance >= 8 ? exitS - clearance : exitS + clearance;
       }
       // ...and the wall behind the landing at the start.
       track.blocks.push({ side: 1, sa: len - 30, sb: len }, { side: -1, sa: len - 30, sb: len });
+      // The bridge in lands at the loop's start, which is also where it ends.
+      (track.exits ??= []).push({ sa: len - DECK_HALF, sb: len });
       tracks.push(track);
       regions.push({ title: s.title, kind: 'section', section: i, path: loop.sparse(40) });
     });
