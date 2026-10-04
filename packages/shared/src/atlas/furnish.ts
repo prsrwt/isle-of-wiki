@@ -26,6 +26,49 @@ export function truncate(s: string, max: number): string {
   return chars.length <= max ? s : `${chars.slice(0, max - 1).join('')}…`;
 }
 
+/**
+ * Word-wraps `s` into at most `maxLines` lines of at most `maxChars` characters, breaking
+ * inside a word only when the word alone is too long. Returns null if it doesn't fit.
+ */
+export function wrapLines(s: string, maxChars: number, maxLines: number): string[] | null {
+  const lines: string[] = [];
+  let line: string[] = [];
+  for (const word of s.split(/\s+/).filter(Boolean)) {
+    let chars = Array.from(word);
+    const room = line.length ? maxChars - line.length - 1 : maxChars;
+    if (chars.length <= room) {
+      if (line.length) line.push(' ');
+      line.push(...chars);
+      continue;
+    }
+    if (line.length) lines.push(line.join(''));
+    line = [];
+    while (chars.length > maxChars) {
+      lines.push(chars.slice(0, maxChars).join(''));
+      chars = chars.slice(maxChars);
+    }
+    line = chars;
+  }
+  if (line.length) lines.push(line.join(''));
+  return lines.length <= maxLines ? lines : null;
+}
+
+/**
+ * Cave name plaque text: the full name, on as few lines as fit, with characters as large as
+ * the plaque allows (≤ `maxWidth` m wide). Only names too long even for 4 small lines are cut.
+ */
+export function plaqueLines(name: string, maxWidth: number): { lines: string[]; cw: number } {
+  for (const lines of [1, 2, 3, 4]) {
+    for (const cw of [0.75, 0.65, 0.55, 0.45]) {
+      const wrapped = wrapLines(name, Math.floor((maxWidth - 1) / cw), lines);
+      if (wrapped) return { lines: wrapped, cw };
+    }
+  }
+  const cw = 0.45;
+  const per = Math.floor((maxWidth - 1) / cw);
+  return { lines: wrapLines(truncate(name, per * 4 - 4), per, 4) ?? [truncate(name, per)], cw };
+}
+
 type PanelRequest = { kind: 'painting'; line: number; image: ImageBlock } | { kind: 'ad'; line: number };
 
 /** Wall space a cave needs either side of its centre: mouth, its ring of rocks, and rubble. */
@@ -233,13 +276,16 @@ export class Furnisher {
       this.box('boulder', point(sgn * (hw + randRange(this.rng, 1.6, 2.8)), s / 2, randRange(this.rng, 0.6, 1.8)), [s * 1.3, s, s], yawQuat(p.t), randInt(this.rng, 0, 15));
     }
 
-    // Paper name plaque resting on the crown (red text on red-lit rock would be unreadable).
-    const label = truncate(link.target, L.signMaxChars);
-    const chars = Array.from(label).length;
-    const cw = Math.min(0.75, (gw + 2) / chars);
-    const plaqueY = top + 0.8;
-    this.box('board', point(0, plaqueY, 1.6), [0.5, 1.7, Math.max(gw * 0.8, chars * cw + 1)], yawQuat(p.t));
-    this.wallText(label, point(0, plaqueY, 1.88), n, cw, Math.min(cw * L.glyphAspect, 1.4), 'sign');
+    // Paper name plaque resting on the crown (red text on red-lit rock would be unreadable),
+    // with the full name: wrapped onto more lines rather than cut short.
+    const { lines, cw } = plaqueLines(link.target, gw + L.plaqueOverhang * 2);
+    const ch = Math.min(cw * L.glyphAspect, 1.4);
+    const lineH = ch * 1.15;
+    const widest = Math.max(...lines.map((l) => Array.from(l).length));
+    const plaqueH = lines.length * lineH + 0.5;
+    const plaqueY = top + 0.25 + plaqueH / 2;
+    this.box('board', point(0, plaqueY, 1.6), [0.5, plaqueH, Math.max(gw * 0.8, widest * cw + 1)], yawQuat(p.t));
+    lines.forEach((l, i) => this.wallText(l, point(0, plaqueY + ((lines.length - 1) / 2 - i) * lineH, 1.88), n, cw, ch, 'sign'));
 
     // Red marker on the floor edge pointing at the cave.
     const across = side === 1 ? FLOOR_HALF - 3.5 : -FLOOR_HALF + 3.5 - 1.5;

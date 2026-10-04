@@ -53,9 +53,9 @@ deterministic build, `@isle-of-wiki/shared/physics`) turns the same data into co
      - ✅ C1: Folio (Tab) — article text and zoomable track map, pick a link or cave
      - ✅ C2: Thread — HUD arrow, distance and on-screen marker for the picked cave
    - ✅ P: Petal layers — long Hidden Lotus petals grow outer lobes over shorter neighbours
-2. Pod + first-person driving (Rapier physics)
+2. Pod + chase-camera driving (Rapier physics)
    - ✅ 2A: physics world — every page's ground and props as solid colliders, stepped by Heartbeat (debug view: P, drop balls: B)
-   - 2B: hover pod controller — thrust, steer, boost, hop mesas, drive into caves
+   - ✅ 2B: hover pod — W/S throttle, A/D steer (car-like: tighter slow, wider fast), Space brake, Shift boost, mouse orbits the chase camera, R respawn, J travel through the cave in front of you; rocks, grandstands and walls are solid; top-bar dashboard (RPM, speed, boost); H for stats & controls (F free-fly for debugging)
    - 2C: pod look and feel — origami pod, engine glow, speed effects, speedometer
 3. Link tunnels + full single-player race
 4. Online multiplayer

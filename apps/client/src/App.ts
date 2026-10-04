@@ -1,12 +1,15 @@
 import * as THREE from 'three';
-import { Guestbook, Heartbeat, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
-import { PhysicsWorld } from '@isle-of-wiki/shared/physics';
+import { Guestbook, Heartbeat, nearestGateInReach, threadGuide, type BiomeId, type Gate, type RaceConfig } from '@isle-of-wiki/shared';
+import { PhysicsWorld, POD } from '@isle-of-wiki/shared/physics';
 import { HouseAdProvider, type AdProvider } from './ads/AdProvider';
 import { FreeFlyControls } from './controls/FreeFlyControls';
 import { Folio } from './folio/Folio';
 import { Gnme, goodnightLines } from './gnme/Gnme';
 import { Input } from './heartbeat/Input';
 import { PhysicsDebug } from './physics/PhysicsDebug';
+import { PodCamera } from './pod/PodCamera';
+import { createPodModel } from './pod/PodModel';
+import { PodDriver } from './pod/PodDriver';
 import { startLoop } from './heartbeat/Loop';
 import type { BiomePalette } from './render/biomes';
 import { loadGlyphFont } from './render/glyphAtlas';
@@ -31,6 +34,11 @@ export class App {
   private readonly gradient = createToonGradient();
   private readonly ads: AdProvider = new HouseAdProvider();
   private readonly folio = new Folio();
+  private readonly driver: PodDriver;
+  private readonly podCamera: PodCamera;
+  private readonly podMesh = createPodModel(this.gradient);
+  /** Smoothed engine revs for the RPM bar, 0..1. */
+  private rpm = 0;
   private readonly hemi = new THREE.HemisphereLight();
   private readonly sun = new THREE.DirectionalLight();
   private readonly sunDir = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
@@ -52,6 +60,8 @@ export class App {
   private fps = 0;
   private readonly tmpDir = new THREE.Vector3();
   private readonly tmpMark = new THREE.Vector3();
+  private readonly podPos = new THREE.Vector3();
+  private readonly podHeading = new THREE.Vector2();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -80,6 +90,11 @@ export class App {
     this.scene.add(this.hemi, this.sun, this.sun.target);
 
     this.controls = new FreeFlyControls(this.camera, canvas, this.input);
+    this.controls.flying = false;
+    this.podCamera = new PodCamera(this.camera);
+    this.driver = new PodDriver(this.input);
+    this.driver.active = () => this.controls.locked && !this.folio.isOpen && !this.controls.flying && !this.jumping;
+    this.scene.add(this.podMesh);
     this.controls.onLockChange = (locked) => this.hud.setPaused(!locked && !!this.world && !this.folio.isOpen);
     this.folio.onClose = () => this.closeFolio();
     this.folio.onSelect = (gate) => {
@@ -88,13 +103,16 @@ export class App {
       this.closeFolio();
     };
 
-    // Heartbeat: physics steps at the fixed rate; then each frame, read input → move camera →
-    // GNME + draw → forget one-shot presses.
+    // Heartbeat: each fixed step, pod controls → physics → pod reads where it ended up (and
+    // whether it drove into a cave); then each frame, read input → look → camera, GNME + draw →
+    // forget one-shot presses.
     this.heartbeat
+      .add(this.driver)
       .add({ name: 'physics', fixedUpdate: () => this.physics?.step() })
+      .add({ name: 'pod-after', fixedUpdate: () => this.driver.afterPhysics() })
       .add({ name: 'input', frameUpdate: () => this.input.poll() })
       .add(this.controls)
-      .add({ name: 'frame', frameUpdate: (dt) => this.frame(dt) })
+      .add({ name: 'frame', frameUpdate: (dt, alpha) => this.frame(dt, alpha) })
       .add({ name: 'input-end', frameUpdate: () => this.input.endFrame() });
 
     window.addEventListener('resize', () => this.resize());
@@ -114,18 +132,23 @@ export class App {
   }
 
   /**
-   * Goes through a cave to `target` (debug key J until hyperspace arrives in Phase 3).
+   * Goes through a cave to `target` (J in front of it, or J at any cave ahead while flying;
+   * the hyperspace tunnel arrives in Phase 3).
    * The Guestbook decides the world: whoever arrives first gets a biome other than the one
    * they came from; anyone later gets the same world.
    */
   async jump(target: string): Promise<void> {
     if (!this.guestbook || !this.world || this.jumping) return;
     this.jumping = true;
+    this.driver.freeze();
     this.hud.setStatus(`Jumping to ${target}…`);
     try {
       await this.enter(target, this.world.layout.biome);
     } catch (err) {
       this.hud.setStatus(`Couldn't reach ${target}: ${(err as Error).message}`);
+      // Stay where you were and drive on.
+      this.driver.release();
+      this.podCamera.reset();
       await new Promise((r) => setTimeout(r, 2500));
     } finally {
       this.hud.setStatus(null);
@@ -148,6 +171,7 @@ export class App {
     this.physicsDebug = new PhysicsDebug(physics, loaded.layout.terrain);
     this.physicsDebug.visible = showPhysics;
     this.scene.add(this.physicsDebug.group);
+    this.driver.attach(physics, loaded.layout.arrival, loaded.layout.arrivalDir);
 
     this.view?.dispose();
     this.view = new WorldView(loaded.layout, this.gradient, this.renderer.capabilities.getMaxAnisotropy(), this.ads);
@@ -158,9 +182,15 @@ export class App {
     this.folio.setWorld(loaded.page, loaded.layout, this.config?.target ?? '');
     this.gnme = new Gnme(this.camera, this.view.cells);
 
-    const [x, y, z] = loaded.layout.arrival;
-    const [dx, dz] = loaded.layout.arrivalDir;
-    this.controls.setPose(x, y + 5, z, Math.atan2(-dx, -dz), -0.06);
+    if (this.controls.flying) {
+      const [x, y, z] = loaded.layout.arrival;
+      const [dx, dz] = loaded.layout.arrivalDir;
+      this.controls.setPose(x, y + 5, z, Math.atan2(-dx, -dz), -0.06);
+    } else {
+      this.controls.setLook(0, 0);
+      this.podCamera.reset();
+      this.placeCamera(0, 1);
+    }
     // Good morning: build what the arrival needs in slices (the page keeps animating), then let
     // the graphics card compile shaders in the background instead of freezing on the first frame.
     await this.gnme.wakeAround(this.camera.position);
@@ -205,6 +235,7 @@ export class App {
 
   /** Dev hook: jump the camera (exposed as window.iow in dev builds). */
   debugPose(x: number, y: number, z: number, yaw: number, pitch: number): void {
+    this.controls.flying = true;
     this.controls.setPose(x, y, z, yaw, pitch);
   }
 
@@ -221,9 +252,40 @@ export class App {
     this.camera.updateProjectionMatrix();
   }
 
-  private frame(dt: number): void {
+  /** Toggles the free-fly spectator camera (debug); the pod waits where it is meanwhile. */
+  private toggleFly(): void {
+    const flying = !this.controls.flying;
+    this.controls.flying = flying;
+    if (flying) {
+      const fwd = this.camera.getWorldDirection(this.tmpDir);
+      const p = this.camera.position;
+      this.controls.setPose(p.x, p.y, p.z, Math.atan2(-fwd.x, -fwd.z), Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1)));
+    } else {
+      this.controls.setLook(0, 0);
+      this.podCamera.reset();
+    }
+  }
+
+  /** Camera and pod model at the pod's pose, blended `alpha` of the way between physics steps. */
+  private placeCamera(dt: number, alpha: number): void {
+    this.driver.pose(alpha, this.podPos, this.podHeading);
+    this.podMesh.position.copy(this.podPos);
+    this.podMesh.rotation.y = Math.atan2(-this.podHeading.x, -this.podHeading.y);
+    if (!this.controls.flying) this.podCamera.update(dt, this.podPos, this.podHeading, this.controls.look);
+  }
+
+  private frame(dt: number, alpha: number): void {
     this.time += dt;
-    if (this.world && this.controls.locked && this.input.wasPressed('overview')) {
+    if (this.world && this.input.wasPressed('info')) this.hud.toggleInfo();
+    if (this.world && this.controls.locked) {
+      if (this.input.wasPressed('fly')) this.toggleFly();
+      if (!this.controls.flying && this.input.wasPressed('respawn')) {
+        this.driver.respawn();
+        this.podCamera.reset();
+      }
+    }
+    if (this.world && this.driver.current) this.placeCamera(dt, alpha);
+    if (this.world && this.controls.locked && this.controls.flying && this.input.wasPressed('overview')) {
       const p = this.camera.position;
       this.controls.setPose(p.x, 900, p.z, 0, -1.45);
     }
@@ -236,8 +298,12 @@ export class App {
       if (this.folio.isOpen) this.closeFolio();
       else this.openFolio();
     }
-    const ahead = this.gateAhead();
-    if (ahead && this.input.wasPressed('jump')) void this.jump(ahead.target);
+    // Caves: driving, J travels through the one you're in front of (within reach); free-flying,
+    // J takes any cave ahead (debug).
+    const reach = !this.controls.flying && this.world ? nearestGateInReach(this.world.layout.gates, [this.podPos.x, this.podPos.y, this.podPos.z]) : null;
+    const ahead = reach ?? this.gateAhead();
+    const ready = !!ahead && (this.controls.flying || reach === ahead);
+    if (ahead && ready && this.controls.locked && this.input.wasPressed('jump')) void this.jump(ahead.target);
 
     if (this.folio.isOpen) {
       // Lights out: draw only Folio's map, not the hidden 3D world.
@@ -256,7 +322,8 @@ export class App {
       this.fpsTime = 0;
       this.updateHudStats();
     }
-    if (this.world) this.hud.setGate(ahead?.target ?? null, !!ahead && ahead.id === this.thread?.id);
+    if (this.world) this.hud.setGate(ahead?.target ?? null, !!ahead && ahead.id === this.thread?.id, ready && !this.jumping);
+    this.updateDash(dt);
     this.updateThread();
   }
 
@@ -329,14 +396,48 @@ export class App {
     return best;
   }
 
+  /** The dashboard: speed, revs and boost (hidden while free-flying). */
+  private updateDash(dt: number): void {
+    const pod = this.driver.current;
+    if (!this.world || !pod || this.controls.flying) {
+      this.hud.setDrive(null);
+      return;
+    }
+    const speed = Math.abs(pod.forwardSpeed());
+    // Revs: idle, rising with speed, kicked up by throttle and boost; eased so the bar sweeps.
+    const throttle = Math.abs(this.driver.lastInput.throttle);
+    const target = Math.min(1, 0.1 + 0.72 * Math.min(1, speed / POD.maxSpeed) + 0.12 * throttle + (pod.boosting ? 0.12 : 0));
+    this.rpm += (target - this.rpm) * Math.min(1, 8 * dt);
+    this.hud.setDrive({ kmh: speed * 3.6, topKmh: POD.boostSpeed * 3.6, rpm: this.rpm, boost: pod.boostTank, boosting: pod.boosting, scraping: pod.scraping });
+  }
+
+  /** Nerd stats for the H panel (refreshed twice a second while it's open). */
   private updateHudStats(): void {
-    if (!this.world) return;
+    this.hud.setGnme(this.showGnme && this.gnme ? goodnightLines(this.gnme.stats()) : null);
+    if (!this.world || !this.hud.infoOpen) return;
     const { page, layout } = this.world;
     const { minX, maxX, minZ, maxZ } = layout.bounds;
-    const size = `${Math.round(maxX - minX)}×${Math.round(maxZ - minZ)} m`;
-    this.hud.setStats(
-      `${this.fps} fps · ${STRUCTURE_NAMES[layout.structure]} · ${BIOME_NAMES[layout.biome]} · ${layout.gates.length} caves → ${page.linkCount} pages · ${size} · speed ${Math.round(this.controls.speed)}`,
-    );
-    this.hud.setGnme(this.showGnme && this.gnme ? goodnightLines(this.gnme.stats()) : null);
+    const pod = this.driver.current;
+    const g = this.gnme?.stats();
+    const rows: [string, string][] = [
+      ['Frame rate', `${this.fps} fps`],
+      ['Page', page.title],
+      ['World', `${STRUCTURE_NAMES[layout.structure]} · ${BIOME_NAMES[layout.biome]}`],
+      ['Size', `${Math.round(maxX - minX)} × ${Math.round(maxZ - minZ)} m`],
+      ['Caves', `${layout.gates.length} → ${page.linkCount} linked pages`],
+      ['Props', `${layout.boxes.length} solid boxes`],
+      ['Camera', this.controls.flying ? `free-fly · speed ${Math.round(this.controls.speed)}` : 'chase'],
+    ];
+    if (pod) {
+      const [x, y, z] = pod.position();
+      rows.push(
+        ['Pod', `${x.toFixed(0)}, ${y.toFixed(1)}, ${z.toFixed(0)}`],
+        ['Hover', pod.surfaceBelow === null ? 'falling' : `${(y - pod.surfaceBelow).toFixed(2)} m up`],
+        ['Respawns', String(pod.respawns)],
+      );
+    }
+    if (g) rows.push(['GNME', goodnightLines(g)[0]]);
+    this.hud.setInfo(rows);
   }
+
 }

@@ -44,7 +44,8 @@ export const LAYOUT = {
   /** A cave mouth spans this many slots of canyon wall. */
   caveLines: 2,
   caveH: 5.5,
-  signMaxChars: 18,
+  /** How far a cave's name plaque may reach past each side of the mouth (m). */
+  plaqueOverhang: 1.5,
 
   // --- Trackside panels (paintings, billboards) ----------------------------
   /** Bottom edge of every panel — above the hover ceiling and cave plaques. */

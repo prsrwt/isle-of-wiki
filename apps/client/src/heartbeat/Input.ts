@@ -2,9 +2,10 @@
  * Heartbeat input layer: keyboard and gamepad both map to the same named actions, so game
  * code asks "is boost held?" instead of "is Shift or RB held?".
  */
-export type Action = 'forward' | 'back' | 'left' | 'right' | 'up' | 'down' | 'boost' | 'overview' | 'gnme' | 'folio' | 'jump' | 'physics' | 'drop';
+export type Action = 'forward' | 'back' | 'left' | 'right' | 'up' | 'down' | 'boost' | 'overview' | 'gnme' | 'folio' | 'jump' | 'physics' | 'drop' | 'fly' | 'respawn' | 'brake' | 'info';
 
-const KEY_BINDINGS: Record<string, Action> = {
+/** A key can mean several actions; which one applies depends on the mode (Space: brake when driving, up when flying). */
+const KEY_BINDINGS: Record<string, Action | Action[]> = {
   KeyW: 'forward',
   ArrowUp: 'forward',
   KeyS: 'back',
@@ -13,7 +14,7 @@ const KEY_BINDINGS: Record<string, Action> = {
   ArrowLeft: 'left',
   KeyD: 'right',
   ArrowRight: 'right',
-  Space: 'up',
+  Space: ['up', 'brake'],
   KeyC: 'down',
   ControlLeft: 'down',
   ShiftLeft: 'boost',
@@ -24,16 +25,21 @@ const KEY_BINDINGS: Record<string, Action> = {
   KeyJ: 'jump',
   KeyP: 'physics',
   KeyB: 'drop',
+  KeyF: 'fly',
+  KeyR: 'respawn',
+  KeyH: 'info',
 };
 
 /** Standard-mapping gamepad buttons. */
 const PAD_BUTTONS: [number, Action][] = [
   [0, 'up'],
   [1, 'down'],
+  [1, 'brake'],
   [5, 'boost'],
   [3, 'overview'],
   [8, 'gnme'],
   [9, 'folio'],
+  [2, 'respawn'],
 ];
 
 const DEADZONE = 0.15;
@@ -49,21 +55,24 @@ export class Input {
   private readonly pad = new Set<Action>();
   private readonly pressed = new Set<Action>();
   private padMove = { x: 0, y: 0 };
+  private padTriggers = { lt: 0, rt: 0 };
   /** Right-stick look, -1..1 per axis. */
   readonly look = { x: 0, y: 0 };
 
   constructor() {
     window.addEventListener('keydown', (e) => {
       if (isTyping(e)) return;
-      const action = KEY_BINDINGS[e.code];
-      if (!action) return;
+      const bound = KEY_BINDINGS[e.code];
+      if (!bound) return;
       if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
-      if (!e.repeat) this.pressed.add(action);
-      this.keys.add(action);
+      for (const action of [bound].flat()) {
+        if (!e.repeat) this.pressed.add(action);
+        this.keys.add(action);
+      }
     });
     window.addEventListener('keyup', (e) => {
-      const action = KEY_BINDINGS[e.code];
-      if (action) this.keys.delete(action);
+      const bound = KEY_BINDINGS[e.code];
+      if (bound) for (const action of [bound].flat()) this.keys.delete(action);
     });
     window.addEventListener('blur', () => this.keys.clear());
   }
@@ -74,12 +83,14 @@ export class Input {
     const before = new Set(this.pad);
     this.pad.clear();
     this.padMove = { x: 0, y: 0 };
+    this.padTriggers = { lt: 0, rt: 0 };
     this.look.x = 0;
     this.look.y = 0;
     if (!gp) return;
     this.padMove = { x: dead(gp.axes[0] ?? 0), y: dead(gp.axes[1] ?? 0) };
     this.look.x = dead(gp.axes[2] ?? 0);
     this.look.y = dead(gp.axes[3] ?? 0);
+    this.padTriggers = { lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0 };
     for (const [i, action] of PAD_BUTTONS) {
       if (gp.buttons[i]?.pressed) {
         this.pad.add(action);
@@ -107,6 +118,11 @@ export class Input {
     const kx = (this.isDown('right') ? 1 : 0) - (this.isDown('left') ? 1 : 0);
     const ky = (this.isDown('forward') ? 1 : 0) - (this.isDown('back') ? 1 : 0);
     return { x: Math.max(-1, Math.min(1, kx + this.padMove.x)), y: Math.max(-1, Math.min(1, ky - this.padMove.y)) };
+  }
+
+  /** Gamepad triggers, 0..1 (left = brake, right = throttle when driving). */
+  triggers(): { lt: number; rt: number } {
+    return this.padTriggers;
   }
 
   clear(): void {

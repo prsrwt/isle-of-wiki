@@ -9,12 +9,22 @@ function $(id: string): HTMLElement {
   return el;
 }
 
+const RPM_CELLS = 16;
+
 export class Hud {
   private readonly root = $('hud');
   private readonly page = $('hud-page');
   private readonly target = $('hud-target');
   private readonly gate = $('hud-gate');
-  private readonly stats = $('hud-stats');
+  private readonly dash = $('hud-dash');
+  private readonly rpm = $('hud-rpm');
+  private readonly speed = $('hud-speed');
+  private readonly speedArc = $('hud-speed-arc');
+  private readonly boostFill = $('hud-boost-fill');
+  private readonly info = $('hud-info');
+  private readonly infoStats = $('hud-info-stats');
+  private readonly rpmCells: HTMLElement[] = [];
+  private lastDash = '';
   private readonly paused = $('paused');
   private readonly gnme = $('hud-gnme');
   private readonly status = $('hud-status');
@@ -34,14 +44,63 @@ export class Hud {
     this.root.classList.remove('hidden');
   }
 
-  /** The cave just ahead, or null. `isThread` when it's the one picked in Folio. */
-  setGate(target: string | null, isThread = false): void {
-    const key = `${target ?? ''}|${isThread}`;
+  /**
+   * The cave just ahead, or null. `isThread` when it's the one picked in Folio; `ready` when
+   * you're close enough in front of it to travel through with J.
+   */
+  setGate(target: string | null, isThread = false, ready = false): void {
+    const key = `${target ?? ''}|${isThread}|${ready}`;
     if (key === this.lastGate) return;
     this.lastGate = key;
     this.gate.classList.toggle('hidden', !target);
     this.gate.classList.toggle('is-thread', isThread);
-    this.gate.textContent = !target ? '' : isThread ? `★ Your cave ⟶ ${target}` : `⟶ ${target}`;
+    this.gate.classList.toggle('is-ready', ready);
+    this.gate.replaceChildren();
+    if (!target) return;
+    this.gate.append(isThread ? `★ Your cave ⟶ ${target}` : `⟶ ${target}`);
+    if (ready) this.gate.append(Object.assign(document.createElement('kbd'), { textContent: 'J' }), 'travel');
+  }
+
+  /**
+   * Speed gauge (km/h, dial full at `topKmh`), RPM bar (0..1) and boost tank (0..1). Null hides
+   * the dashboard (free-fly).
+   */
+  setDrive(d: { kmh: number; topKmh: number; rpm: number; boost: number; boosting: boolean; scraping: boolean } | null): void {
+    if (!this.rpmCells.length) {
+      for (let i = 0; i < RPM_CELLS; i++) this.rpmCells.push(this.rpm.appendChild(document.createElement('i')));
+    }
+    const lit = d ? Math.round(Math.min(1, Math.max(0, d.rpm)) * RPM_CELLS) : 0;
+    const kmh = d ? Math.round(d.kmh) : 0;
+    const boost = d ? Math.round(d.boost * 100) : 0;
+    const key = d ? `${kmh}|${lit}|${boost}|${d.boosting}|${d.scraping}` : '';
+    if (key === this.lastDash) return;
+    this.lastDash = key;
+    this.dash.classList.toggle('hidden', !d);
+    if (!d) return;
+    this.speed.textContent = String(kmh);
+    this.speedArc.style.strokeDasharray = `${Math.min(100, (d.kmh / d.topKmh) * 100).toFixed(1)} 100`;
+    this.rpmCells.forEach((c, i) => c.classList.toggle('on', i < lit));
+    this.boostFill.style.width = `${boost}%`;
+    this.dash.classList.toggle('is-boosting', d.boosting);
+    this.dash.classList.toggle('is-scraping', d.scraping);
+  }
+
+  get infoOpen(): boolean {
+    return !this.info.classList.contains('hidden');
+  }
+
+  toggleInfo(): void {
+    this.info.classList.toggle('hidden');
+  }
+
+  /** Rows for the stats panel (H). */
+  setInfo(rows: [string, string][]): void {
+    this.infoStats.replaceChildren(
+      ...rows.flatMap(([k, v]) => [
+        Object.assign(document.createElement('dt'), { textContent: k }),
+        Object.assign(document.createElement('dd'), { textContent: v }),
+      ]),
+    );
   }
 
   /**
@@ -70,10 +129,6 @@ export class Hud {
     if (!at) return;
     this.threadMark.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px) translate(-50%, -100%)`;
     this.threadMarkDist.textContent = formatDistance(at.distance);
-  }
-
-  setStats(text: string): void {
-    this.stats.textContent = text;
   }
 
   /** GNME's bedtime roll call, or null to hide it. */

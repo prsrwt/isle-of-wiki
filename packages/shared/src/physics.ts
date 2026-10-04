@@ -3,3 +3,4 @@
  * that never simulates (the layout worker, world generation) doesn't bundle Rapier.
  */
 export * from './physics/physics';
+export * from './pod/pod';

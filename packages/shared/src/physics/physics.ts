@@ -1,6 +1,6 @@
 import type * as RapierModule from '@dimforge/rapier3d-deterministic-compat';
 import { SIM } from '../constants';
-import type { Quat, Terrain, Vec3, WorldLayout } from '../atlas/types';
+import type { BoxKind, Quat, Terrain, Vec3, WorldLayout } from '../atlas/types';
 
 /**
  * Physics: one Rapier world per page, built from the same `WorldLayout` the renderer draws,
@@ -36,10 +36,14 @@ function rapier(): Rapier {
 /**
  * Collision groups (Rapier packs "what I am" in the upper 16 bits and "what I touch" in the
  * lower 16). Queries use them to look at the ground alone, or at the props alone.
+ * DECKS are the props a pod may hover over (bridges); every other prop (mesas, boulders,
+ * grandstands, huts, cave rocks, pillars…) is an obstacle it collides with.
  */
 const GROUND = 0x0001;
 const PROPS = 0x0002;
 const MOVERS = 0x0004;
+const DECKS = 0x0008;
+const DECK_KINDS: ReadonlySet<BoxKind> = new Set(['bridge']);
 const groups = (member: number, touches: number) => ((member << 16) | touches) >>> 0;
 const ALL = 0xffff;
 
@@ -57,17 +61,41 @@ export interface RayHit {
   normal: Vec3;
 }
 
-/** A moving body (test balls today; pods in Phase 2B). */
-export interface Ball {
+/** A moving body made of spheres that never tips over: pods and test balls. */
+export interface Body {
+  /** Radius of the main sphere (the one at the body's centre). */
   readonly radius: number;
   position(): Vec3;
+  /** Turns it about the vertical (a unit quaternion with only y and w set). */
+  setYaw(qy: number, qw: number): void;
   velocity(): Vec3;
   setVelocity(v: Vec3): void;
+  /** Moves it instantly (respawn), keeping its velocity. */
+  teleport(p: Vec3): void;
   /** 1 = normal gravity, 0 = floats. */
   setGravityScale(s: number): void;
 }
+/** Test balls are plain bodies. */
+export type Ball = Body;
 
-export type RayFilter = 'all' | 'ground' | 'props';
+/** One solid sphere of a body, offset from its centre (in the body's own frame, nose −z). */
+export interface BodySphere {
+  offset: Vec3;
+  radius: number;
+}
+
+export interface BodySurface {
+  /** 0 = slides along walls, 1 = grips. */
+  friction: number;
+  /** 0 = dead stop, 1 = perfect bounce. */
+  restitution: number;
+}
+
+/**
+ * What a ray looks at: everything solid, the ground alone, the props alone, the surfaces a
+ * pod can hover over (ground and decks), or just the decks (mesas, boulders, bridges).
+ */
+export type RayFilter = 'all' | 'ground' | 'props' | 'hover' | 'decks';
 
 const v3 = (v: { x: number; y: number; z: number }): Vec3 => [v.x, v.y, v.z];
 
@@ -78,7 +106,7 @@ export class PhysicsWorld {
   private readonly R = rapier();
   private readonly world: RapierModule.World;
   private readonly boxes: RapierModule.Collider[] = [];
-  private readonly balls = new Map<Ball, RapierModule.RigidBody>();
+  private readonly balls = new Map<Body, RapierModule.RigidBody>();
   private disposed = false;
 
   /** Builds the physics for one page (loading Rapier first if needed). */
@@ -97,7 +125,7 @@ export class PhysicsWorld {
       const [x, y, z] = b.center;
       const desc = RAPIER.ColliderDesc.cuboid(b.size[0] / 2, b.size[1] / 2, b.size[2] / 2)
         .setTranslation(x, y, z)
-        .setCollisionGroups(groups(PROPS, ALL));
+        .setCollisionGroups(groups(DECK_KINDS.has(b.kind) ? PROPS | DECKS : PROPS, ALL));
       if (b.rot) desc.setRotation({ x: b.rot[0], y: b.rot[1], z: b.rot[2], w: b.rot[3] });
       this.boxes.push(this.world.createCollider(desc));
     }
@@ -118,7 +146,7 @@ export class PhysicsWorld {
     const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
     const d = { x: dir[0] / len, y: dir[1] / len, z: dir[2] / len };
     const ray = new this.R.Ray({ x: origin[0], y: origin[1], z: origin[2] }, d);
-    const only = filter === 'ground' ? GROUND : filter === 'props' ? PROPS : GROUND | PROPS;
+    const only = { all: GROUND | PROPS, ground: GROUND, props: PROPS, hover: GROUND | DECKS, decks: DECKS }[filter];
     const hit = this.world.castRayAndGetNormal(ray, maxDistance, true, undefined, groups(ALL, only));
     if (!hit) return null;
     const t = hit.timeOfImpact;
@@ -131,25 +159,46 @@ export class PhysicsWorld {
     return hit ? hit.point[1] : null;
   }
 
-  /** Drops a solid ball into the world (test objects; fast-moving, so tunnelling protection is on). */
+  /** Drops a solid ball into the world (test objects). */
   addBall(center: Vec3, radius: number): Ball {
+    return this.addBody(center, radius, { friction: 0.8, restitution: 0.3 });
+  }
+
+  /**
+   * Adds a moving sphere that never tips over. Fast-moving, so tunnelling protection (CCD:
+   * checking the whole path of each step, not just where it ends) is on.
+   */
+  addBody(center: Vec3, radius: number, surface: BodySurface, extra: readonly BodySphere[] = []): Body {
     const RAPIER = this.R;
     const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(center[0], center[1], center[2]).setCcdEnabled(true),
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(center[0], center[1], center[2]).setCcdEnabled(true).lockRotations(),
     );
-    this.world.createCollider(
-      RAPIER.ColliderDesc.ball(radius).setRestitution(0.3).setFriction(0.8).setCollisionGroups(groups(MOVERS, ALL)),
-      body,
-    );
-    const ball: Ball = {
+    for (const s of [{ offset: [0, 0, 0] as Vec3, radius }, ...extra]) {
+      this.world.createCollider(
+        RAPIER.ColliderDesc.ball(s.radius)
+          .setTranslation(s.offset[0], s.offset[1], s.offset[2])
+          .setRestitution(surface.restitution)
+          .setFriction(surface.friction)
+          .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min)
+          .setCollisionGroups(groups(MOVERS, ALL)),
+        body,
+      );
+    }
+    const handle: Body = {
       radius,
       position: () => v3(body.translation()),
+      setYaw: (qy, qw) => body.setRotation({ x: 0, y: qy, z: 0, w: qw }, true),
       velocity: () => v3(body.linvel()),
       setVelocity: (v) => body.setLinvel({ x: v[0], y: v[1], z: v[2] }, true),
+      teleport: (p) => body.setTranslation({ x: p[0], y: p[1], z: p[2] }, true),
       setGravityScale: (s) => body.setGravityScale(s, true),
     };
-    this.balls.set(ball, body);
-    return ball;
+    this.balls.set(handle, body);
+    return handle;
+  }
+
+  removeBody(body: Body): void {
+    this.removeBall(body);
   }
 
   removeBall(ball: Ball): void {

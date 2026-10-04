@@ -16,8 +16,28 @@
 
     <div id="hud" class="hidden">
       <div class="hud-top">
-        <div class="chip"><span class="chip-label">ON PAGE</span><span id="hud-page"></span></div>
+        <div class="chip chip-page"><span class="chip-label">ON PAGE</span><span id="hud-page"></span></div>
+        <div id="hud-dash" class="dash hidden">
+          <div class="dash-rpm">
+            <span class="dash-label">RPM</span>
+            <div id="hud-rpm" class="rpm-bar"></div>
+          </div>
+          <div class="dash-speed">
+            <svg class="speed-dial" viewBox="0 0 120 66" aria-hidden="true">
+              <path class="dial-track" d="M12 60 A48 48 0 0 1 108 60" pathLength="100" />
+              <path id="hud-speed-arc" class="dial-fill" d="M12 60 A48 48 0 0 1 108 60" pathLength="100" />
+            </svg>
+            <span id="hud-speed" class="speed-num">0</span>
+            <span class="speed-unit">km/h</span>
+          </div>
+          <div class="dash-boost">
+            <span class="dash-label">BOOST</span>
+            <div class="boost-bar"><div id="hud-boost-fill" class="boost-fill"></div></div>
+          </div>
+        </div>
         <div class="chip chip-target"><span class="chip-label">TARGET</span><span id="hud-target"></span></div>
+      </div>
+      <div class="hud-sub">
         <div id="hud-thread" class="chip chip-thread hidden">
           <span class="chip-label">THREAD</span>
           <svg id="hud-thread-arrow" class="thread-arrow" viewBox="0 0 24 24" aria-hidden="true">
@@ -32,10 +52,34 @@
       <div id="hud-gnme" class="gnme hidden"></div>
       <div id="hud-status" class="hud-status hidden"></div>
       <div class="crosshair"></div>
-      <div class="hud-bottom">
-        <span id="hud-stats"></span>
-        <span class="keys">WASD move · mouse look · Space / C up-down · Shift boost · wheel speed · Tab folio · M overview · G goodnight · J jump (debug) · P physics view (debug) · B drop ball · Esc release</span>
+      <div id="hud-info" class="info-panel hidden">
+        <section>
+          <h3>Stats</h3>
+          <dl id="hud-info-stats"></dl>
+        </section>
+        <section>
+          <h3>Controls</h3>
+          <dl class="info-keys">
+            <dt>W / S</dt><dd>throttle / brake, reverse</dd>
+            <dt>A / D</dt><dd>steer while moving (wider turns at speed)</dd>
+            <dt>Space</dt><dd>brake</dd>
+            <dt>Shift</dt><dd>boost</dd>
+            <dt>Mouse</dt><dd>look around</dd>
+            <dt>J</dt><dd>travel through the cave in front of you</dd>
+            <dt>R</dt><dd>respawn at the last safe spot</dd>
+            <dt>Tab</dt><dd>Folio: article map, pick a Thread</dd>
+            <dt>H</dt><dd>this panel</dd>
+            <dt>Esc</dt><dd>release the mouse</dd>
+          </dl>
+          <h3>Debug</h3>
+          <dl class="info-keys">
+            <dt>F</dt><dd>free-fly (Space / C up-down, wheel speed, M overview, J any cave)</dd>
+            <dt>G</dt><dd>GNME roll call</dd>
+            <dt>P</dt><dd>physics view · B drop a ball</dd>
+          </dl>
+        </section>
       </div>
+      <div class="hud-bottom"><span class="hint">H · stats &amp; controls</span></div>
     </div>
 
     <div id="folio" class="hidden">
@@ -70,7 +114,7 @@
     </div>
 
     <div id="paused" class="hidden">
-      <span>Click the world to fly</span>
+      <span>Click the world to drive</span>
       <button id="open-menu" type="button">Change pages</button>
     </div>
 
