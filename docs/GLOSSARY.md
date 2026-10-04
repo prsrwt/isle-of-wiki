@@ -28,7 +28,7 @@ Use these names in code (folders, types, functions) and in issues.
 |---|---|
 | **Seedpod** | The central arena: grandstands, crowd, pit lane. |
 | **Petal** | One section's looping canyon. |
-| **Petal layer** | Inner and outer petals when a section is long. |
+| **Petal layer** | A petal with a long section grows an outer **lobe**: past a neck it widens over shorter neighbouring petals (which tuck in beneath it), so the canyon stays closer to the Seedpod. Still one loop, read in order. |
 | **Stem gate** | Where a petal leaves or rejoins the Seedpod. |
 | **Calyx** | Optional outer ring joining the petal tips. |
 

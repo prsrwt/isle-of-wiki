@@ -55,9 +55,11 @@ export class Path {
     private readonly floorY: (s: number) => number,
   ) {
     let s = 0;
-    points.forEach(([x, z], i) => {
-      if (i > 0) {
-        const d = Math.hypot(x - this.xs[i - 1], z - this.zs[i - 1]);
+    points.forEach(([x, z]) => {
+      const last = this.xs.length - 1;
+      if (last >= 0) {
+        // Compare with the last point kept, not the input's previous one (which may have been dropped).
+        const d = Math.hypot(x - this.xs[last], z - this.zs[last]);
         if (d < 1e-6) return;
         s += d;
       }

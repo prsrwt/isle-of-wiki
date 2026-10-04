@@ -8,7 +8,7 @@
  */
 import type { BiomeId, StructureId } from '../atlas/types';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface RaceConfig {
   start: string;

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { parseHTML } from 'linkedom';
 import { describe, expect, it } from 'vitest';
+import { canyonSpacing } from '../src/atlas/structures/structure';
 import {
   BIOMES,
   buildSections,
@@ -8,8 +9,11 @@ import {
   infoboxLinks,
   LAYOUT,
   layoutPage,
+  mulberry32,
   parseArticle,
+  placeItems,
   rankBiomes,
+  STRUCTURES,
   terrainHeight,
   type BiomeId,
   type ParsedPage,
@@ -229,6 +233,51 @@ describe('Atlas guarantees across rooms and a big article', () => {
     for (let roomSeed = 1; roomSeed <= 12; roomSeed++) {
       const sig = new Guestbook(roomSeed).arrive(page.title);
       check(layoutPage(page, { roomSeed, ...sig }), `room ${roomSeed} ${sig.structure}/${sig.biome}`);
+    }
+  }, 60_000);
+});
+
+describe('Hidden Lotus petal layers', () => {
+  const moonHtml = readFileSync(new URL('./fixtures/moon.html', import.meta.url), 'utf8');
+  const moon = (() => {
+    const { document } = parseHTML(`<!doctype html><html><body>${moonHtml}</body></html>`);
+    return parseArticle('Moon', (document.querySelector('.mw-parser-output') ?? document.body) as unknown as Element);
+  })();
+  const pages: [string, ParsedPage][] = [
+    ['List', parseFixture()],
+    ['Moon', moon],
+  ];
+
+  /** Furthest any petal reaches from the Seedpod. */
+  const reach = (layout: WorldLayout) =>
+    Math.max(...layout.regions.filter((r) => r.kind === 'section').flatMap((r) => r.path.map(([x, z]) => Math.hypot(x, z))));
+
+  it('grows outer lobes so long sections stay close (List was 1213 m, Moon 1532 m before layers)', () => {
+    for (const biome of ['dune', 'frost', 'canopy'] as BiomeId[]) {
+      expect(reach(layoutPage(pages[0][1], { roomSeed: 1, biome, structure: 'hiddenLotus' })), `List ${biome}`).toBeLessThan(1000);
+      expect(reach(layoutPage(moon, { roomSeed: 1, biome, structure: 'hiddenLotus' })), `Moon ${biome}`).toBeLessThan(1250);
+    }
+  }, 60_000);
+
+  it.each(pages)('%s: petals (lobes included) never come closer than canyon spacing past the stems', (_, page) => {
+    for (const biome of ['dune', 'frost', 'relic'] as BiomeId[]) {
+      const shape = BIOMES[biome];
+      const sections = buildSections(page).map((s) => ({ title: s.title, lines: placeItems(s.items).lines }));
+      const plan = STRUCTURES.hiddenLotus.plan({ rng: mulberry32(5), title: page.title, sections, pitLines: 10, biome: shape });
+      const spacing = canyonSpacing(shape);
+      // Stems share sand near the Seedpod by design; beyond this every petal has its own walls.
+      const clear = 1.2 * (spacing / ((((2 * Math.PI - (100 * Math.PI) / 180) / 8) * 0.5)));
+      const petals = [...new Set(plan.tracks.map((t) => t.path))].map((p) =>
+        p.xs.map((x, i) => [x, p.zs[i]] as const).filter(([x, z], i) => i % 2 === 0 && Math.hypot(x, z) > clear),
+      );
+      expect(petals.length).toBeGreaterThan(1);
+      for (let i = 0; i < petals.length; i++) {
+        for (let j = i + 1; j < petals.length; j++) {
+          let min = Infinity;
+          for (const [ax, az] of petals[i]) for (const [bx, bz] of petals[j]) min = Math.min(min, Math.hypot(ax - bx, az - bz));
+          expect(min, `${biome}: petals ${i} and ${j}`).toBeGreaterThanOrEqual(spacing - 2);
+        }
+      }
     }
   }, 60_000);
 });

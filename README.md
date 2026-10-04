@@ -52,6 +52,7 @@ will use the same data as colliders.
    - ✅ C: Folio article map + Thread navigation
      - ✅ C1: Folio (Tab) — article text and zoomable track map, pick a link or cave
      - ✅ C2: Thread — HUD arrow, distance and on-screen marker for the picked cave
+   - ✅ P: Petal layers — long Hidden Lotus petals grow outer lobes over shorter neighbours
 2. Pod + first-person driving (Rapier physics)
 3. Link tunnels + full single-player race
 4. Online multiplayer
