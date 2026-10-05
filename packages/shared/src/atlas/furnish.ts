@@ -135,14 +135,19 @@ export class Furnisher {
     this.wallText(label, [c[0] + p.t[0] * 0.45, c[1], c[2] + p.t[1] * 0.45], p.t, cw, ch, 'heading');
   }
 
-  /** Rock arch spanning a canyon at p, legs buried in the walls, crown well above the hover ceiling. */
-  arch(p: PathPoint, half: number): void {
+  /**
+   * Rock arch spanning a canyon at p, legs buried in the walls, crown well above the hover
+   * ceiling. `skip` draws the same random numbers but places nothing, so skipping one arch
+   * leaves the rest of the world as it was.
+   */
+  arch(p: PathPoint, half: number, skip = false): void {
     const R = half + 5;
     const N = 9;
     const t3: Vec3 = [p.t[0], 0, p.t[1]];
     const segLen = 2 * R * Math.sin(Math.PI / (2 * N)) + 2;
     const thick = randRange(this.rng, 4.5, 6.5);
     const depth = randRange(this.rng, 6, 10);
+    if (skip) return;
     for (let i = 0; i < N; i++) {
       const th = ((i + 0.5) * Math.PI) / N;
       const c = Math.cos(th);
@@ -153,12 +158,16 @@ export class Furnisher {
     }
   }
 
-  /** Arches every so often along a stretch of path (biome decides how often). */
-  arches(path: Path, half: number, from: number, to: number): void {
+  /**
+   * Arches every so often along a stretch of path (biome decides how often), except over
+   * `avoid` stretches: where a bridge leaves through an open wall, a leg would stand in its way.
+   */
+  arches(path: Path, half: number, from: number, to: number, avoid: { sa: number; sb: number }[] = []): void {
     const every = this.biome.archEvery;
     if (!every) return;
+    const margin = half + 10;
     for (let s = from + randRange(this.rng, every * 0.35, every * 0.7); s < to; s += every + randRange(this.rng, -every * 0.25, every * 0.25)) {
-      this.arch(path.at(s), half);
+      this.arch(path.at(s), half, avoid.some((a) => s > a.sa - margin && s < a.sb + margin));
     }
   }
 
@@ -370,10 +379,18 @@ export class Furnisher {
    * and the article title painted across the middle.
    */
   seedpod(title: string, a: ArenaRect, pit: Track | null, pitPlaced: PlacedItem[], canyons: Path[]): void {
-    // Huts and towers must not stand where a canyon comes into the Seedpod.
+    // Huts and towers must not stand where a canyon comes into the Seedpod. Measured to each
+    // segment, not just the corners: a bridge lane is one straight segment out of the middle.
     const clear = (x: number, z: number, r: number) =>
       canyons.every((c) => {
-        for (let i = 0; i < c.xs.length; i += 3) if (Math.hypot(c.xs[i] - x, c.zs[i] - z) < WALL_HALF + r) return false;
+        for (let i = 0; i + 1 < c.xs.length; i++) {
+          const ax = c.xs[i];
+          const az = c.zs[i];
+          const dx = c.xs[i + 1] - ax;
+          const dz = c.zs[i + 1] - az;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+          if (Math.hypot(ax + dx * t - x, az + dz * t - z) < WALL_HALF + r) return false;
+        }
         return true;
       });
     const d = a.z1 - a.z0;

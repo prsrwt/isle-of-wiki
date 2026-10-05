@@ -59,7 +59,7 @@ export function layoutPage(page: ParsedPage, spec: WorldSpec): WorldLayout {
     const track = new Track(t.path, t.s0, t.lines, terrain);
     for (const b of t.blocks) track.block(b.side, b.sa, b.sb);
     f.section(track, sec.placed);
-    f.arches(t.path, WALL_HALF, t.s0, t.s0 + t.lines * L.lineH);
+    f.arches(t.path, WALL_HALF, t.s0, t.s0 + t.lines * L.lineH, t.exits);
   }
   for (const span of plan.archSpans) f.arches(span.path, span.half, span.from, span.to);
   for (const d of plan.decks) f.box('bridge', d.center, d.size, d.rot);

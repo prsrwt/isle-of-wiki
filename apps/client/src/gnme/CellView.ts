@@ -9,7 +9,8 @@ import { createTerrainMesh } from '../render/terrainMesh';
 import type { Rest, Sleeper, SleepCounts } from './Gnme';
 
 /** Big shapes you can see from afar live in regions; everything else is chunk detail. */
-export const CORE_KINDS = new Set<BoxKind>(['spire', 'arch', 'stand', 'hut', 'tower', 'mesa']);
+// Bridges too: a deck can be hundreds of metres long, and as detail it would only be drawn near its middle.
+export const CORE_KINDS = new Set<BoxKind>(['spire', 'arch', 'stand', 'hut', 'tower', 'mesa', 'bridge']);
 const ROCK_KINDS = new Set<BoxKind>(['spire', 'arch', 'mesa', 'boulder', 'caverock']);
 
 export interface CellData {

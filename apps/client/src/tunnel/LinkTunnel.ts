@@ -170,7 +170,10 @@ export class LinkTunnel {
   }
 
   /** Each frame while in the tunnel; `steer` is the move stick (x right, y forward). */
-  update(dt: number, steer: { x: number; y: number }): void {
+  update(frameDt: number, steer: { x: number; y: number }): void {
+    // A slow frame (the next world being built) slows the ride for a moment instead of
+    // jumping it forward.
+    const dt = Math.min(frameDt, 1 / 30);
     this.time += dt;
     this.speed += (SPEED_TOP - this.speed) * (1 - Math.exp(-0.9 * dt));
     this.travelled += this.speed * dt;

@@ -34,6 +34,8 @@ export interface TrackPlan {
   lines: number;
   /** Stretches of wall where another canyon opens (no caves or boards there). */
   blocks: { side: Side; sa: number; sb: number }[];
+  /** Stretches where a bridge or connector leaves through the wall: no arches there. */
+  exits?: { sa: number; sb: number }[];
 }
 
 export interface StructurePlan {
